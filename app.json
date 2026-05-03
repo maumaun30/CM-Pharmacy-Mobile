@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "CM Pharmacy POS",
-    "slug": "cm-pharmacy-mobile",
+    "slug": "cm-pharmacy",
     "scheme": "cmpharmacy",
     "version": "1.0.0",
     "orientation": "landscape",
@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cmpharmacy.mobile"
+      "bundleIdentifier": "com.cmpharmacy.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.cmpharmacy.mobile",
@@ -26,6 +29,11 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT",
@@ -50,6 +58,19 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c2231292-12bf-49e5-aaeb-ff3cbb5c6f79"
+      }
+    },
+    "owner": "maumaun30s-organization",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c2231292-12bf-49e5-aaeb-ff3cbb5c6f79"
     }
   }
 }
