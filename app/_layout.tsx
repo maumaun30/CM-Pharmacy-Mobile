@@ -1,5 +1,6 @@
 import "../global.css";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
@@ -18,6 +19,7 @@ const queryClient = new QueryClient({
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
       <BottomSheetModalProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
@@ -29,6 +31,7 @@ export default function RootLayout() {
           </AuthProvider>
         </QueryClientProvider>
       </BottomSheetModalProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

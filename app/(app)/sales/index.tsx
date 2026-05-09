@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { Easing, FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated";
 import { FlashList } from "@shopify/flash-list";
 import { Link } from "expo-router";
@@ -34,6 +35,7 @@ function statusPill(status: string | null) {
 }
 
 export default function SalesList() {
+  const insets = useSafeAreaInsets();
   const { data, isLoading, isRefetching, refetch } = useQuery({
     queryKey: ["sales"],
     queryFn: () => listSales(),
@@ -69,8 +71,10 @@ export default function SalesList() {
     <View className="flex-1 bg-emerald-50/40">
       <Animated.View
         entering={FadeInDown.duration(220).easing(fastOut)}
-        className="border-b border-emerald-100 bg-white px-4 py-4"
+        className="border-b border-emerald-100 bg-white px-4"
         style={{
+          paddingTop: insets.top + 16,
+          paddingBottom: 16,
           shadowColor: "#000",
           shadowOpacity: 0.03,
           shadowRadius: 4,

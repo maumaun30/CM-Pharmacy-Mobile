@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { Easing, FadeIn, FadeInDown, FadeInRight, LinearTransition, ZoomIn } from "react-native-reanimated";
 import { FlashList } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
@@ -57,6 +58,7 @@ function stockColor(stock: number) {
 }
 
 export default function POSScreen() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const branchId = user?.current_branch_id ?? user?.branch_id ?? null;
   const cart = useCart();
@@ -157,75 +159,88 @@ export default function POSScreen() {
   }
 
   return (
-    <View className="flex-1 flex-row bg-emerald-50/40">
-      {/* ── LEFT: products ───────────────────────────────────────────── */}
-      <View className="flex-1 p-4">
-        <Animated.View entering={FadeInDown.duration(220).easing(fastOut)} className="mb-3">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-2">
-              <View className="rounded-md bg-emerald-100 px-2 py-1">
-                <Text className="text-xs font-semibold text-emerald-700">{branchCode || "BRANCH"}</Text>
-              </View>
-              <Text className="text-base font-bold text-slate-800">{branchName}</Text>
-            </View>
-            <View className="flex-row items-center gap-3">
-              <View className="flex-row items-center gap-1">
-                {socketLive ? <Wifi size={14} color={EMERALD} /> : <WifiOff size={14} color="#94a3b8" />}
-                <Text className={`text-xs ${socketLive ? "text-emerald-600" : "text-slate-400"}`}>
-                  {socketLive ? "Live" : "Offline"}
-                </Text>
-              </View>
-              <View className="flex-row items-center gap-1">
-                <Scan size={14} color={SLATE} />
-                <Text className="text-xs text-slate-500">{user?.username}</Text>
-              </View>
-              <View className="flex-row items-center gap-0.5 rounded-md border border-emerald-100 bg-white p-0.5">
-                <TouchableOpacity
-                  onPress={() => setViewMode("grid")}
-                  className={`h-7 w-7 items-center justify-center rounded ${
-                    viewMode === "grid" ? "bg-emerald-100" : "bg-transparent"
-                  }`}
-                >
-                  <LayoutGrid size={14} color={viewMode === "grid" ? EMERALD_DARK : SLATE} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setViewMode("list")}
-                  className={`h-7 w-7 items-center justify-center rounded ${
-                    viewMode === "list" ? "bg-emerald-100" : "bg-transparent"
-                  }`}
-                >
-                  <List size={14} color={viewMode === "list" ? EMERALD_DARK : SLATE} />
-                </TouchableOpacity>
-              </View>
-            </View>
+    <View className="flex-1 flex-col bg-emerald-50/40">
+      {/* ── HEADER ──────────────────────────────────────────────────── */}
+      <Animated.View
+        entering={FadeInDown.duration(220).easing(fastOut)}
+        className="flex-row items-center justify-between border-b border-emerald-100 bg-white px-4"
+        style={{
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          shadowColor: "#000",
+          shadowOpacity: 0.04,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 2 },
+          elevation: 2,
+        }}
+      >
+        <View className="flex-row items-center gap-2">
+          <View className="rounded-md bg-emerald-100 px-2 py-1">
+            <Text className="text-xs font-semibold text-emerald-700">{branchCode || "BRANCH"}</Text>
           </View>
-        </Animated.View>
-
-        <Animated.View
-          entering={FadeInDown.duration(240).delay(40).easing(fastOut)}
-          className="mb-3 flex-row items-center rounded-xl border border-emerald-100 bg-white px-3"
-          style={{
-            shadowColor: "#000",
-            shadowOpacity: 0.04,
-            shadowRadius: 6,
-            shadowOffset: { width: 0, height: 2 },
-            elevation: 2,
-          }}
-        >
-          <Search size={18} color={SLATE} />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search by name, SKU, or barcode"
-            placeholderTextColor="#94a3b8"
-            className="flex-1 px-3 py-3 text-base text-slate-900"
-          />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch("")} className="px-2 py-2">
-              <Text className="text-xs text-slate-500">Clear</Text>
+          <Text className="text-base font-bold text-slate-800">{branchName}</Text>
+        </View>
+        <View className="flex-row items-center gap-3">
+          <View className="flex-row items-center gap-1">
+            {socketLive ? <Wifi size={14} color={EMERALD} /> : <WifiOff size={14} color="#94a3b8" />}
+            <Text className={`text-xs ${socketLive ? "text-emerald-600" : "text-slate-400"}`}>
+              {socketLive ? "Live" : "Offline"}
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-1">
+            <Scan size={14} color={SLATE} />
+            <Text className="text-xs text-slate-500">{user?.username}</Text>
+          </View>
+          <View className="flex-row items-center gap-0.5 rounded-md border border-emerald-100 bg-white p-0.5">
+            <TouchableOpacity
+              onPress={() => setViewMode("grid")}
+              className={`h-7 w-7 items-center justify-center rounded ${
+                viewMode === "grid" ? "bg-emerald-100" : "bg-transparent"
+              }`}
+            >
+              <LayoutGrid size={14} color={viewMode === "grid" ? EMERALD_DARK : SLATE} />
             </TouchableOpacity>
-          )}
-        </Animated.View>
+            <TouchableOpacity
+              onPress={() => setViewMode("list")}
+              className={`h-7 w-7 items-center justify-center rounded ${
+                viewMode === "list" ? "bg-emerald-100" : "bg-transparent"
+              }`}
+            >
+              <List size={14} color={viewMode === "list" ? EMERALD_DARK : SLATE} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Animated.View>
+
+      {/* ── MAIN CONTENT (products + cart) ──────────────────────────── */}
+      <View className="flex-1 flex-row">
+        {/* LEFT: products */}
+        <View className="flex-1 flex-col p-3">
+          <Animated.View
+            entering={FadeInDown.duration(240).delay(40).easing(fastOut)}
+            className="mb-3 flex-row items-center rounded-xl border border-emerald-100 bg-white px-3"
+            style={{
+              shadowColor: "#000",
+              shadowOpacity: 0.04,
+              shadowRadius: 6,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: 2,
+            }}
+          >
+            <Search size={18} color={SLATE} />
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search by name, SKU, or barcode"
+              placeholderTextColor="#94a3b8"
+              className="flex-1 px-3 py-3 text-base text-slate-900"
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch("")} className="px-2 py-2">
+                <Text className="text-xs text-slate-500">Clear</Text>
+              </TouchableOpacity>
+            )}
+          </Animated.View>
 
         <Animated.View
           entering={FadeIn.duration(280).delay(80).easing(fastOut)}
@@ -289,10 +304,11 @@ export default function POSScreen() {
         />
       </View>
 
-      {/* ── RIGHT: cart ─────────────────────────────────────────────── */}
+      {/* RIGHT: cart (responsive: 30% width on wide screens, 350px minimum) */}
       <Animated.View
         entering={FadeInRight.duration(280).easing(fastOut)}
-        className="w-96 border-l border-emerald-100 bg-white"
+        className="border-l border-emerald-100 bg-white"
+        style={{ minWidth: 320, maxWidth: "35%" }}
       >
         <View className="flex-row items-center gap-2 border-b border-emerald-100 bg-emerald-50/60 px-4 py-3">
           <View className="h-9 w-9 items-center justify-center rounded-full bg-emerald-600">
@@ -645,6 +661,7 @@ export default function POSScreen() {
           setDiscountFor(null);
         }}
       />
+      </View>
     </View>
   );
 }

@@ -3,7 +3,7 @@
     "name": "CM Pharmacy POS",
     "slug": "cm-pharmacy",
     "scheme": "cmpharmacy",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "landscape",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

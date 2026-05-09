@@ -1,5 +1,6 @@
 import { Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Receipt, ScanLine, Settings } from "lucide-react-native";
 import { useAuth } from "@/auth/AuthContext";
 
@@ -8,6 +9,7 @@ const SLATE_400 = "#94a3b8";
 
 export default function AppLayout() {
   const { user, loading } = useAuth();
+  const insets = useSafeAreaInsets();
 
   if (loading) {
     return (
@@ -28,14 +30,17 @@ export default function AppLayout() {
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: "600",
-          marginBottom: 4,
+          lineHeight: 14,
+          marginTop: 2,
+          marginBottom: 0,
         },
         tabBarStyle: {
           backgroundColor: "#ffffff",
           borderTopColor: "#d1fae5",
           borderTopWidth: 1,
-          height: 60,
-          paddingTop: 6,
+          height: 52 + insets.bottom,
+          paddingBottom: insets.bottom + 4,
+          paddingTop: 8,
           shadowColor: "#000",
           shadowOpacity: 0.04,
           shadowRadius: 6,
