@@ -25,11 +25,17 @@ import {
 } from "lucide-react-native";
 import dayjs from "dayjs";
 import { createRefund, listRefunds, listSales, type RefundPayload } from "@/api/sales";
+import { useAuth } from "@/auth/AuthContext";
+import { can } from "@/auth/permissions";
+import { colors, EASE } from "@/ui/theme";
+import { Pill, saleStatusPill } from "@/ui/Pill";
 
-const EMERALD = "#059669";
-const EMERALD_DARK = "#047857";
-const SLATE = "#64748b";
-const fastOut = Easing.out(Easing.quad);
+// Local aliases kept so existing inline usages read the same, but sourced from
+// the shared theme so the palette lives in one place.
+const EMERALD = colors.emerald;
+const EMERALD_DARK = colors.emeraldDark;
+const SLATE = colors.textMuted;
+const fastOut = EASE;
 
 interface SaleItem {
   id: number;
@@ -71,19 +77,14 @@ interface RefundRecord {
   }[];
 }
 
-function statusPill(status: string | null) {
-  const s = (status ?? "COMPLETED").toUpperCase();
-  if (s === "PARTIALLY_REFUNDED" || s === "PARTIAL_REFUND")
-    return { label: "Partial Refund", bg: "bg-amber-100", text: "text-amber-700" };
-  if (s === "FULLY_REFUNDED" || s === "REFUNDED")
-    return { label: "Refunded", bg: "bg-red-100", text: "text-red-700" };
-  return { label: "Completed", bg: "bg-emerald-100", text: "text-emerald-700" };
-}
-
 export default function SaleDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const saleId = Number(id);
   const [refundOpen, setRefundOpen] = useState(false);
+  const { user } = useAuth();
+  // Issuing refunds is a supervisor action (API: sales.refund → admin + manager).
+  // Cashiers can still view the sale and its refund history, just not refund.
+  const canRefund = can(user, "sales.refund");
 
   const { data, isLoading } = useQuery({
     queryKey: ["sales"],
@@ -128,7 +129,7 @@ export default function SaleDetail() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-emerald-50/40">
+      <View className="flex-1 items-center justify-center bg-slate-50">
         <ActivityIndicator color={EMERALD} />
       </View>
     );
@@ -136,7 +137,7 @@ export default function SaleDetail() {
 
   if (!sale) {
     return (
-      <View className="flex-1 items-center justify-center bg-emerald-50/40 px-6">
+      <View className="flex-1 items-center justify-center bg-slate-50 px-6">
         <View className="mb-3 h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
           <Receipt size={28} color="#a7f3d0" />
         </View>
@@ -148,18 +149,18 @@ export default function SaleDetail() {
     );
   }
 
-  const pill = statusPill(sale.status);
+  const pill = saleStatusPill(sale.status);
   const subtotal = sale.subtotal ?? sale.items.reduce((s, i) => s + i.price * i.quantity, 0);
   const hasRefundActivity = refunds.length > 0 || /REFUND/i.test(sale.status ?? "");
 
   return (
     <ScrollView
-      className="flex-1 bg-emerald-50/40"
+      className="flex-1 bg-slate-50"
       contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
     >
       <Animated.View
         entering={FadeInDown.duration(220).easing(fastOut)}
-        className="mb-3 overflow-hidden rounded-2xl border border-emerald-100 bg-white"
+        className="mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white"
         style={{
           shadowColor: "#000",
           shadowOpacity: 0.04,
@@ -168,7 +169,7 @@ export default function SaleDetail() {
           elevation: 2,
         }}
       >
-        <View className="flex-row items-center gap-3 bg-emerald-50/60 p-4">
+        <View className="flex-row items-center gap-3 bg-slate-50 p-4">
           <View
             className="h-12 w-12 items-center justify-center rounded-full bg-emerald-600"
             style={{
@@ -187,9 +188,7 @@ export default function SaleDetail() {
               {dayjs(sale.soldAt).format("MMM D, YYYY • h:mm A")}
             </Text>
           </View>
-          <View className={`rounded-md px-2 py-1 ${pill.bg}`}>
-            <Text className={`text-[11px] font-semibold ${pill.text}`}>{pill.label}</Text>
-          </View>
+          <Pill label={pill.label} variant={pill.variant} />
         </View>
 
         <View className="p-4">
@@ -209,7 +208,7 @@ export default function SaleDetail() {
 
       <Animated.View
         entering={FadeInUp.duration(240).delay(40).easing(fastOut)}
-        className="mb-3 overflow-hidden rounded-2xl border border-emerald-100 bg-white"
+        className="mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white"
         style={{
           shadowColor: "#000",
           shadowOpacity: 0.04,
@@ -218,7 +217,7 @@ export default function SaleDetail() {
           elevation: 2,
         }}
       >
-        <View className="border-b border-emerald-100 bg-emerald-50/60 px-4 py-2">
+        <View className="border-b border-slate-200 bg-slate-50 px-4 py-2">
           <Text className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
             Items
           </Text>
@@ -277,7 +276,7 @@ export default function SaleDetail() {
 
       <Animated.View
         entering={FadeInUp.duration(240).delay(80).easing(fastOut)}
-        className="mb-3 overflow-hidden rounded-2xl border border-emerald-100 bg-white"
+        className="mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white"
         style={{
           shadowColor: "#000",
           shadowOpacity: 0.04,
@@ -286,7 +285,7 @@ export default function SaleDetail() {
           elevation: 2,
         }}
       >
-        <View className="border-b border-emerald-100 bg-emerald-50/60 px-4 py-2">
+        <View className="border-b border-slate-200 bg-slate-50 px-4 py-2">
           <Text className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
             Totals
           </Text>
@@ -300,7 +299,7 @@ export default function SaleDetail() {
               accent
             />
           )}
-          <View className="mt-1 flex-row items-baseline justify-between border-t border-emerald-100 pt-2">
+          <View className="mt-1 flex-row items-baseline justify-between border-t border-slate-200 pt-2">
             <Text className="text-base font-bold text-slate-800">TOTAL</Text>
             <Text className="text-2xl font-extrabold text-emerald-600">
               ₱{Number(sale.totalAmount).toFixed(2)}
@@ -328,42 +327,44 @@ export default function SaleDetail() {
         </View>
       </Animated.View>
 
-      {/* ── Refund actions ───────────────────────────────────────────── */}
-      <Animated.View
-        entering={FadeInUp.duration(240).delay(120).easing(fastOut)}
-        className="mb-3 flex-row gap-2"
-      >
-        <TouchableOpacity
-          onPress={() => setRefundOpen(true)}
-          disabled={refundable <= 0}
-          activeOpacity={0.85}
-          className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 active:bg-emerald-700"
-          style={{
-            shadowColor: EMERALD_DARK,
-            shadowOpacity: refundable <= 0 ? 0 : 0.25,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: 4 },
-            elevation: refundable <= 0 ? 0 : 4,
-            opacity: refundable <= 0 ? 0.5 : 1,
-          }}
+      {/* ── Refund actions (supervisors only) ────────────────────────── */}
+      {canRefund && (
+        <Animated.View
+          entering={FadeInUp.duration(240).delay(120).easing(fastOut)}
+          className="mb-3 flex-row gap-2"
         >
-          <Undo2 size={16} color="#fff" />
-          <Text className="text-sm font-semibold text-white">
-            {refundable <= 0 ? "Fully refunded" : "Process refund"}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => refetchRefunds()}
-          activeOpacity={0.85}
-          className="h-11 w-11 items-center justify-center rounded-xl border border-emerald-200 bg-white active:bg-emerald-50"
-        >
-          {refundsFetching ? (
-            <ActivityIndicator size="small" color={EMERALD_DARK} />
-          ) : (
-            <RotateCw size={16} color={EMERALD_DARK} />
-          )}
-        </TouchableOpacity>
-      </Animated.View>
+          <TouchableOpacity
+            onPress={() => setRefundOpen(true)}
+            disabled={refundable <= 0}
+            activeOpacity={0.85}
+            className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 active:bg-emerald-700"
+            style={{
+              shadowColor: EMERALD_DARK,
+              shadowOpacity: refundable <= 0 ? 0 : 0.25,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 4 },
+              elevation: refundable <= 0 ? 0 : 4,
+              opacity: refundable <= 0 ? 0.5 : 1,
+            }}
+          >
+            <Undo2 size={16} color="#fff" />
+            <Text className="text-sm font-semibold text-white">
+              {refundable <= 0 ? "Fully refunded" : "Process refund"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => refetchRefunds()}
+            activeOpacity={0.85}
+            className="h-11 w-11 items-center justify-center rounded-xl border border-emerald-200 bg-white active:bg-emerald-50"
+          >
+            {refundsFetching ? (
+              <ActivityIndicator size="small" color={EMERALD_DARK} />
+            ) : (
+              <RotateCw size={16} color={EMERALD_DARK} />
+            )}
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       {/* ── Refund history ───────────────────────────────────────────── */}
       {hasRefundActivity && (
@@ -609,11 +610,11 @@ function RefundModal({
             placeholderTextColor="#94a3b8"
             multiline
             numberOfLines={2}
-            className="rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2 text-sm text-slate-900"
+            className="rounded-lg border border-emerald-200 bg-slate-50 px-3 py-2 text-sm text-slate-900"
             style={{ minHeight: 56, textAlignVertical: "top" }}
           />
 
-          <View className="mt-3 flex-row items-baseline justify-between border-t border-emerald-100 pt-2">
+          <View className="mt-3 flex-row items-baseline justify-between border-t border-slate-200 pt-2">
             <Text className="text-sm text-slate-600">
               Refund total ({totalQty} {totalQty === 1 ? "item" : "items"})
             </Text>

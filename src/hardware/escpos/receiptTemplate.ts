@@ -34,7 +34,7 @@ function row(left: string, right: string, width = COL): string {
 
 export function buildReceiptText(d: ReceiptData): string {
   const lines: string[] = [];
-  lines.push(center(`CM Pharmacy — ${d.branchName}`));
+  lines.push(center(`Maun Pharmacy — ${d.branchName}`));
   lines.push(center(`Sale #${d.saleId}  ${d.date}`));
   lines.push(center(`Cashier: ${d.cashier}`));
   lines.push("-".repeat(COL));

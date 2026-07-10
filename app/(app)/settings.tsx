@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, { Easing, FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated";
+import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import {
   Bluetooth,
   BluetoothConnected,
@@ -15,14 +14,15 @@ import {
 } from "lucide-react-native";
 import { useAuth } from "@/auth/AuthContext";
 import { clearPrinterMac, getSavedPrinterMac } from "@/hardware/escpos/printer";
+import { colors, EASE } from "@/ui/theme";
+import { ScreenHeader } from "@/ui/ScreenHeader";
 
-const EMERALD = "#059669";
-const EMERALD_DARK = "#047857";
-const SLATE = "#64748b";
-const fastOut = Easing.out(Easing.quad);
+const EMERALD = colors.emerald;
+const EMERALD_DARK = colors.emeraldDark;
+const SLATE = colors.textMuted;
+const fastOut = EASE;
 
 export default function SettingsScreen() {
-  const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
   const [printerMac, setPrinterMac] = useState<string | null>(null);
 
@@ -64,29 +64,14 @@ export default function SettingsScreen() {
   };
 
   return (
-    <View className="flex-1 bg-emerald-50/40">
-      <Animated.View
-        entering={FadeInDown.duration(220).easing(fastOut)}
-        className="border-b border-emerald-100 bg-white px-4"
-        style={{
-          paddingTop: insets.top + 16,
-          paddingBottom: 16,
-          shadowColor: "#000",
-          shadowOpacity: 0.03,
-          shadowRadius: 4,
-          shadowOffset: { width: 0, height: 2 },
-          elevation: 2,
-        }}
-      >
-        <Text className="text-2xl font-bold text-slate-800">Settings</Text>
-        <Text className="text-sm text-slate-500">Manage your session, hardware, and connection.</Text>
-      </Animated.View>
+    <View className="flex-1 bg-slate-50">
+      <ScreenHeader title="Settings" subtitle="Manage your session, hardware, and connection." />
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         {/* ── Account card ─────────────────────────────────────────── */}
         <Animated.View
           entering={FadeInUp.duration(260).delay(40).easing(fastOut)}
-          className="mb-4 overflow-hidden rounded-2xl border border-emerald-100 bg-white"
+          className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white"
           style={{
             shadowColor: "#000",
             shadowOpacity: 0.04,
@@ -129,7 +114,7 @@ export default function SettingsScreen() {
             </Text>
           </View>
 
-          <View className="border-t border-emerald-100 p-3">
+          <View className="border-t border-slate-200 p-3">
             <TouchableOpacity
               onPress={confirmSignOut}
               activeOpacity={0.85}
@@ -144,7 +129,7 @@ export default function SettingsScreen() {
         {/* ── Receipt printer ──────────────────────────────────────── */}
         <Animated.View
           entering={FadeInUp.duration(260).delay(80).easing(fastOut)}
-          className="mb-4 overflow-hidden rounded-2xl border border-emerald-100 bg-white"
+          className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white"
           style={{
             shadowColor: "#000",
             shadowOpacity: 0.04,
@@ -213,7 +198,7 @@ export default function SettingsScreen() {
         {/* ── Barcode scanner ──────────────────────────────────────── */}
         <Animated.View
           entering={FadeInUp.duration(260).delay(120).easing(fastOut)}
-          className="mb-4 overflow-hidden rounded-2xl border border-emerald-100 bg-white"
+          className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white"
           style={{
             shadowColor: "#000",
             shadowOpacity: 0.04,
@@ -239,7 +224,7 @@ export default function SettingsScreen() {
         {/* ── Server ────────────────────────────────────────────────── */}
         <Animated.View
           entering={FadeInUp.duration(260).delay(160).easing(fastOut)}
-          className="mb-4 overflow-hidden rounded-2xl border border-emerald-100 bg-white"
+          className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white"
           style={{
             shadowColor: "#000",
             shadowOpacity: 0.04,
@@ -261,7 +246,7 @@ export default function SettingsScreen() {
           className="mb-2 flex-row items-center justify-center gap-1.5"
         >
           <ShieldCheck size={12} color={SLATE} />
-          <Text className="text-[11px] text-slate-500">CM Pharmacy POS • v1.0.0</Text>
+          <Text className="text-[11px] text-slate-500">Maun Pharmacy • v1.0.0</Text>
         </Animated.View>
       </ScrollView>
     </View>
@@ -270,7 +255,7 @@ export default function SettingsScreen() {
 
 function SectionHeader({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <View className="flex-row items-center gap-1.5 border-b border-emerald-100 bg-emerald-50/60 px-4 py-2">
+    <View className="flex-row items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-4 py-2">
       {icon}
       <Text className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">{label}</Text>
     </View>

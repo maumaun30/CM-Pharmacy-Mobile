@@ -3,9 +3,10 @@ import { ActivityIndicator, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Receipt, ScanLine, Settings } from "lucide-react-native";
 import { useAuth } from "@/auth/AuthContext";
+import { colors } from "@/ui/theme";
 
-const EMERALD = "#059669";
-const SLATE_400 = "#94a3b8";
+const EMERALD = colors.emerald;
+const SLATE_400 = colors.textFaint;
 
 export default function AppLayout() {
   const { user, loading } = useAuth();
@@ -13,7 +14,7 @@ export default function AppLayout() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-emerald-50">
+      <View className="flex-1 items-center justify-center bg-slate-50">
         <ActivityIndicator size="large" color={EMERALD} />
       </View>
     );
@@ -36,7 +37,7 @@ export default function AppLayout() {
         },
         tabBarStyle: {
           backgroundColor: "#ffffff",
-          borderTopColor: "#d1fae5",
+          borderTopColor: colors.border,
           borderTopWidth: 1,
           height: 52 + insets.bottom,
           paddingBottom: insets.bottom + 4,

@@ -1,18 +1,17 @@
 import { useMemo, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, { Easing, FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated";
+import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import { FlashList } from "@shopify/flash-list";
 import { Link } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Receipt, RotateCw, Search, ShoppingBag, Undo2, User as UserIcon } from "lucide-react-native";
+import { ChevronRight, Receipt, RotateCw, Search, ShoppingBag, User as UserIcon } from "lucide-react-native";
 import dayjs from "dayjs";
 import { listSales } from "@/api/sales";
-
-const EMERALD = "#059669";
-const EMERALD_DARK = "#047857";
-const SLATE = "#64748b";
-const fastOut = Easing.out(Easing.quad);
+import { colors, EASE } from "@/ui/theme";
+import { ScreenHeader } from "@/ui/ScreenHeader";
+import { Card } from "@/ui/Card";
+import { StatCard } from "@/ui/StatCard";
+import { Pill, saleStatusPill } from "@/ui/Pill";
 
 interface Sale {
   id: number;
@@ -25,17 +24,7 @@ interface Sale {
   items: { id: number; quantity: number }[];
 }
 
-function statusPill(status: string | null) {
-  const s = (status ?? "COMPLETED").toUpperCase();
-  if (s === "PARTIAL_REFUND")
-    return { label: "Partial Refund", bg: "bg-amber-100", text: "text-amber-700", icon: <Undo2 size={11} color="#b45309" /> };
-  if (s === "REFUNDED")
-    return { label: "Refunded", bg: "bg-red-100", text: "text-red-700", icon: <Undo2 size={11} color="#b91c1c" /> };
-  return { label: "Completed", bg: "bg-emerald-100", text: "text-emerald-700", icon: null as any };
-}
-
 export default function SalesList() {
-  const insets = useSafeAreaInsets();
   const { data, isLoading, isRefetching, refetch } = useQuery({
     queryKey: ["sales"],
     queryFn: () => listSales(),
@@ -48,9 +37,7 @@ export default function SalesList() {
     if (!search.trim()) return arr;
     const q = search.trim().toLowerCase();
     return arr.filter(
-      (s) =>
-        String(s.id).includes(q) ||
-        (s.seller?.name ?? "").toLowerCase().includes(q),
+      (s) => String(s.id).includes(q) || (s.seller?.name ?? "").toLowerCase().includes(q),
     );
   }, [data, search]);
 
@@ -68,113 +55,58 @@ export default function SalesList() {
   }, [sales]);
 
   return (
-    <View className="flex-1 bg-emerald-50/40">
-      <Animated.View
-        entering={FadeInDown.duration(220).easing(fastOut)}
-        className="border-b border-emerald-100 bg-white px-4"
-        style={{
-          paddingTop: insets.top + 16,
-          paddingBottom: 16,
-          shadowColor: "#000",
-          shadowOpacity: 0.03,
-          shadowRadius: 4,
-          shadowOffset: { width: 0, height: 2 },
-          elevation: 2,
-        }}
-      >
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-2xl font-bold text-slate-800">Sales</Text>
-            <Text className="text-sm text-slate-500">Recent transactions for your branch.</Text>
-          </View>
+    <View className="flex-1 bg-slate-50">
+      <ScreenHeader
+        title="Sales"
+        subtitle="Recent transactions for your branch."
+        right={
           <TouchableOpacity
             onPress={() => refetch()}
             activeOpacity={0.85}
-            className="h-10 w-10 items-center justify-center rounded-full bg-emerald-100 active:bg-emerald-200"
+            className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
           >
-            <RotateCw size={16} color={EMERALD_DARK} />
+            <RotateCw size={16} color={colors.emeraldDark} />
           </TouchableOpacity>
-        </View>
-      </Animated.View>
+        }
+      />
 
       <View className="px-4 pt-3">
-        <Animated.View
-          entering={FadeInUp.duration(240).delay(40).easing(fastOut)}
-          className="mb-3 flex-row gap-2"
-        >
-          <View
-            className="flex-1 rounded-xl border border-emerald-100 bg-white p-3"
-            style={{
-              shadowColor: "#000",
-              shadowOpacity: 0.04,
-              shadowRadius: 4,
-              shadowOffset: { width: 0, height: 2 },
-              elevation: 1,
-            }}
-          >
-            <Text className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Today</Text>
-            <Text className="text-2xl font-extrabold text-emerald-600">
-              ₱{todayStats.total.toFixed(2)}
-            </Text>
-            <Text className="text-xs text-slate-500">
-              {todayStats.count} {todayStats.count === 1 ? "sale" : "sales"}
-            </Text>
-          </View>
-          <View
-            className="flex-1 rounded-xl border border-emerald-100 bg-white p-3"
-            style={{
-              shadowColor: "#000",
-              shadowOpacity: 0.04,
-              shadowRadius: 4,
-              shadowOffset: { width: 0, height: 2 },
-              elevation: 1,
-            }}
-          >
-            <Text className="text-[11px] font-medium uppercase tracking-wider text-slate-500">All time</Text>
-            <Text className="text-2xl font-extrabold text-slate-700">{sales.length}</Text>
-            <Text className="text-xs text-slate-500">total sales</Text>
-          </View>
+        <Animated.View entering={FadeInUp.duration(240).delay(40).easing(EASE)} className="mb-3 flex-row gap-2">
+          <StatCard label="Today" value={`₱${todayStats.total.toFixed(2)}`} accent sub={`${todayStats.count} ${todayStats.count === 1 ? "sale" : "sales"}`} />
+          <StatCard label="All time" value={String(sales.length)} sub="total sales" />
         </Animated.View>
 
-        <Animated.View
-          entering={FadeInUp.duration(240).delay(80).easing(fastOut)}
-          className="mb-3 flex-row items-center rounded-xl border border-emerald-100 bg-white px-3"
-          style={{
-            shadowColor: "#000",
-            shadowOpacity: 0.04,
-            shadowRadius: 4,
-            shadowOffset: { width: 0, height: 2 },
-            elevation: 1,
-          }}
-        >
-          <Search size={18} color={SLATE} />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search by sale ID or cashier"
-            placeholderTextColor="#94a3b8"
-            className="flex-1 px-3 py-3 text-base text-slate-900"
-          />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch("")} className="px-2 py-2">
-              <Text className="text-xs text-slate-500">Clear</Text>
-            </TouchableOpacity>
-          )}
+        <Animated.View entering={FadeInUp.duration(240).delay(80).easing(EASE)} className="mb-3">
+          <Card elevated={false} className="flex-row items-center px-3">
+            <Search size={18} color={colors.textMuted} />
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search by sale ID or cashier"
+              placeholderTextColor={colors.textFaint}
+              className="flex-1 px-3 py-3 text-base text-slate-900"
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch("")} className="px-2 py-2">
+                <Text className="text-xs text-slate-500">Clear</Text>
+              </TouchableOpacity>
+            )}
+          </Card>
         </Animated.View>
       </View>
 
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color={EMERALD} />
+          <ActivityIndicator color={colors.emerald} />
         </View>
       ) : sales.length === 0 ? (
         <ScrollView
           contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 24 }}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={EMERALD} />}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.emerald} />}
         >
-          <Animated.View entering={FadeIn.duration(220).easing(fastOut)} className="items-center">
-            <View className="mb-3 h-20 w-20 items-center justify-center rounded-full bg-emerald-50">
-              <Receipt size={36} color="#a7f3d0" />
+          <Animated.View entering={FadeIn.duration(220).easing(EASE)} className="items-center">
+            <View className="mb-3 h-20 w-20 items-center justify-center rounded-full bg-slate-100">
+              <Receipt size={36} color={colors.textFaint} />
             </View>
             <Text className="text-base font-semibold text-slate-700">No sales yet</Text>
             <Text className="mt-1 text-center text-xs text-slate-500">
@@ -187,7 +119,7 @@ export default function SalesList() {
           <FlashList
             data={sales}
             keyExtractor={(s) => String(s.id)}
-            refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={EMERALD} />}
+            refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.emerald} />}
             contentContainerStyle={{ paddingBottom: 16 }}
             renderItem={({ item, index }) => <SaleRow sale={item} index={index} />}
           />
@@ -198,42 +130,27 @@ export default function SalesList() {
 }
 
 function SaleRow({ sale, index }: { sale: Sale; index: number }) {
-  const pill = statusPill(sale.status);
+  const pill = saleStatusPill(sale.status);
   const itemCount = sale.items?.reduce((sum, i) => sum + (i.quantity ?? 0), 0) ?? 0;
 
   return (
-    <Animated.View entering={FadeInUp.duration(200).delay(Math.min(index, 10) * 18).easing(fastOut)}>
+    <Animated.View entering={FadeInUp.duration(200).delay(Math.min(index, 10) * 18).easing(EASE)} className="mb-2">
       <Link href={`/(app)/sales/${sale.id}` as any} asChild>
-        <TouchableOpacity
-          activeOpacity={0.85}
-          className="mb-2 rounded-xl border border-emerald-100 bg-white p-3 active:border-emerald-300 active:bg-emerald-50"
-          style={{
-            shadowColor: "#000",
-            shadowOpacity: 0.03,
-            shadowRadius: 4,
-            shadowOffset: { width: 0, height: 1 },
-            elevation: 1,
-          }}
-        >
-          <View className="flex-row items-center gap-3">
-            <View className="h-11 w-11 items-center justify-center rounded-full bg-emerald-100">
-              <ShoppingBag size={18} color={EMERALD_DARK} />
+        <TouchableOpacity activeOpacity={0.85}>
+          <Card className="flex-row items-center gap-3 p-3 active:bg-slate-50">
+            <View className="h-11 w-11 items-center justify-center rounded-full bg-emerald-50">
+              <ShoppingBag size={18} color={colors.emeraldDark} />
             </View>
             <View className="flex-1">
               <View className="flex-row items-center gap-2">
                 <Text className="text-sm font-bold text-slate-800">#{sale.id}</Text>
-                <View className={`flex-row items-center gap-1 rounded-md px-1.5 py-0.5 ${pill.bg}`}>
-                  {pill.icon}
-                  <Text className={`text-[10px] font-semibold ${pill.text}`}>{pill.label}</Text>
-                </View>
+                <Pill label={pill.label} variant={pill.variant} />
               </View>
               <View className="mt-0.5 flex-row items-center gap-2">
-                <Text className="text-[11px] text-slate-500">
-                  {dayjs(sale.soldAt).format("MMM D, h:mm A")}
-                </Text>
+                <Text className="text-[11px] text-slate-500">{dayjs(sale.soldAt).format("MMM D, h:mm A")}</Text>
                 {sale.seller?.name && (
                   <View className="flex-row items-center gap-1">
-                    <UserIcon size={10} color={SLATE} />
+                    <UserIcon size={10} color={colors.textMuted} />
                     <Text className="text-[11px] text-slate-500">{sale.seller.name}</Text>
                   </View>
                 )}
@@ -243,17 +160,13 @@ function SaleRow({ sale, index }: { sale: Sale; index: number }) {
               </Text>
             </View>
             <View className="items-end">
-              <Text className="text-base font-extrabold text-emerald-600">
-                ₱{Number(sale.totalAmount).toFixed(2)}
-              </Text>
+              <Text className="text-base font-extrabold text-emerald-600">₱{Number(sale.totalAmount).toFixed(2)}</Text>
               {sale.totalDiscount > 0 && (
-                <Text className="text-[11px] font-medium text-emerald-700">
-                  −₱{Number(sale.totalDiscount).toFixed(2)}
-                </Text>
+                <Text className="text-[11px] font-medium text-emerald-700">−₱{Number(sale.totalDiscount).toFixed(2)}</Text>
               )}
             </View>
-            <ChevronRight size={18} color={SLATE} />
-          </View>
+            <ChevronRight size={18} color={colors.textFaint} />
+          </Card>
         </TouchableOpacity>
       </Link>
     </Animated.View>

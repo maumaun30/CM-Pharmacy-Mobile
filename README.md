@@ -1,6 +1,6 @@
-# CM Pharmacy Mobile (POS)
+# Maun Pharmacy Mobile (POS)
 
-Cashier-only Android tablet app for the CM Pharmacy POS. Wraps the existing Express + Supabase backend (`../CM-Pharmacy-API`) — no API changes — with a native UI sized for an Android tablet at the counter, a paired Bluetooth HID barcode scanner, and a paired Bluetooth ESC/POS thermal receipt printer.
+Cashier-only Android tablet app for the Maun Pharmacy POS. Wraps the existing Express + Postgres/Drizzle backend (`../CM-Pharmacy-API`) — no API changes — with a native UI sized for an Android tablet at the counter, a paired Bluetooth HID barcode scanner, and a paired Bluetooth ESC/POS thermal receipt printer (with a cash drawer on its RJ11 port).
 
 ## Status
 
@@ -69,7 +69,7 @@ Copy `.env.example` to `.env` and set:
 ```
 EXPO_PUBLIC_API_BASE_URL=http://<lan-ip>:5000/api
 EXPO_PUBLIC_SOCKET_URL=http://<lan-ip>:5000
-EXPO_PUBLIC_SITE_NAME=CM Pharmacy POS
+EXPO_PUBLIC_SITE_NAME=Maun Pharmacy
 ```
 
 The tablet must be able to reach `<lan-ip>` — same Wi-Fi as the dev machine, no firewall blocking the API port.
@@ -139,7 +139,24 @@ The Postgres `create_sale` RPC still owns the stock-deduction transaction — sa
 - **`@gorhom/bottom-sheet` install fails:** re-run with `--legacy-peer-deps`.
 - **Native module changes don't show up:** run `npx expo prebuild --clean` then `npm run android`.
 
+## Peripherals (scanner / printer / cash drawer)
+
+| Device | Status | Notes |
+|---|---|---|
+| **Barcode scanner** (USB/Bluetooth HID) | ✅ Works now, no build needed | Acts as a keyboard: `useHidScanner` + a hidden auto-focused input on the POS screen capture the scan + Enter. Pair it in Android settings; each scan adds the matching product. |
+| **Thermal printer** (Bluetooth ESC/POS, 80mm) | 🔧 Scaffolded; needs a dev build | `src/hardware/escpos/` builds the receipt + raw commands. Real printing needs the native module + a custom dev build (below). |
+| **Cash drawer** ("cashier") | 🔧 Via the printer | Not a separate device — it hangs off the printer's RJ11 port and opens with the `ESCPOS.DRAWER_KICK` byte sequence (`printReceipt(data, { openDrawer: true })` or `kickCashDrawer()`). |
+
+Bluetooth + location permissions are already declared in `app.json`. To finish the printer/drawer:
+
+```bash
+npx expo install react-native-bluetooth-escpos-printer
+# then uncomment the require() in src/hardware/escpos/printer.ts (getPrinter)
+npx expo prebuild --clean
+npx expo run:android          # custom dev build — NOT Expo Go
+```
+
 ## Related
 
-- `../CM-Pharmacy-API` — Express + Supabase backend (unchanged for v1)
+- `../CM-Pharmacy-API` — Express + Postgres/Drizzle backend (unchanged for the mobile app)
 - `../CM-Pharmacy-UI` — Next.js admin/POS web app (full feature set)

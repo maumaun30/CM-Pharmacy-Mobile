@@ -32,11 +32,12 @@ import { useAuth } from "@/auth/AuthContext";
 import { useCart, type CartItem } from "@/pos/useCart";
 import { useHidScanner } from "@/hardware/useHidScanner";
 import { useBranchSocket } from "@/socket/useBranchSocket";
+import { colors, EASE } from "@/ui/theme";
 
-const EMERALD = "#059669";
-const EMERALD_DARK = "#047857";
-const SLATE = "#64748b";
-const fastOut = Easing.out(Easing.quad);
+const EMERALD = colors.emerald;
+const EMERALD_DARK = colors.emeraldDark;
+const SLATE = colors.textMuted;
+const fastOut = EASE;
 
 interface Receipt {
   saleId: number | null;
@@ -159,11 +160,11 @@ export default function POSScreen() {
   }
 
   return (
-    <View className="flex-1 flex-col bg-emerald-50/40">
+    <View className="flex-1 flex-col bg-slate-50">
       {/* ── HEADER ──────────────────────────────────────────────────── */}
       <Animated.View
         entering={FadeInDown.duration(220).easing(fastOut)}
-        className="flex-row items-center justify-between border-b border-emerald-100 bg-white px-4"
+        className="flex-row items-center justify-between border-b border-slate-200 bg-white px-4"
         style={{
           paddingTop: insets.top + 12,
           paddingBottom: 12,
@@ -191,7 +192,7 @@ export default function POSScreen() {
             <Scan size={14} color={SLATE} />
             <Text className="text-xs text-slate-500">{user?.username}</Text>
           </View>
-          <View className="flex-row items-center gap-0.5 rounded-md border border-emerald-100 bg-white p-0.5">
+          <View className="flex-row items-center gap-0.5 rounded-md border border-slate-200 bg-white p-0.5">
             <TouchableOpacity
               onPress={() => setViewMode("grid")}
               className={`h-7 w-7 items-center justify-center rounded ${
@@ -218,7 +219,7 @@ export default function POSScreen() {
         <View className="flex-1 flex-col p-3">
           <Animated.View
             entering={FadeInDown.duration(240).delay(40).easing(fastOut)}
-            className="mb-3 flex-row items-center rounded-xl border border-emerald-100 bg-white px-3"
+            className="mb-3 flex-row items-center rounded-xl border border-slate-200 bg-white px-3"
             style={{
               shadowColor: "#000",
               shadowOpacity: 0.04,
@@ -278,7 +279,6 @@ export default function POSScreen() {
               data={filtered}
               keyExtractor={(item) => String(item.id)}
               numColumns={viewMode === "grid" ? 4 : 1}
-              estimatedItemSize={viewMode === "grid" ? 140 : 72}
               contentContainerStyle={{ padding: 8 }}
               renderItem={({ item, index }) =>
                 viewMode === "grid" ? (
@@ -307,10 +307,10 @@ export default function POSScreen() {
       {/* RIGHT: cart (responsive: 30% width on wide screens, 350px minimum) */}
       <Animated.View
         entering={FadeInRight.duration(280).easing(fastOut)}
-        className="border-l border-emerald-100 bg-white"
+        className="border-l border-slate-200 bg-white"
         style={{ minWidth: 320, maxWidth: "35%" }}
       >
-        <View className="flex-row items-center gap-2 border-b border-emerald-100 bg-emerald-50/60 px-4 py-3">
+        <View className="flex-row items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
           <View className="h-9 w-9 items-center justify-center rounded-full bg-emerald-600">
             <ShoppingCart size={18} color="#fff" />
           </View>
@@ -420,7 +420,7 @@ export default function POSScreen() {
           )}
         </View>
 
-        <View className="border-t-2 border-emerald-100 bg-white p-4">
+        <View className="border-t-2 border-slate-200 bg-white p-4">
           <View className="mb-1 flex-row justify-between">
             <Text className="text-sm text-slate-600">Subtotal</Text>
             <Text className="text-sm text-slate-800">₱{cart.subtotal.toFixed(2)}</Text>
@@ -431,7 +431,7 @@ export default function POSScreen() {
               <Text className="text-sm font-semibold text-emerald-700">−₱{cart.discount.toFixed(2)}</Text>
             </View>
           )}
-          <View className="mt-1 flex-row items-baseline justify-between border-t border-emerald-100 pt-2">
+          <View className="mt-1 flex-row items-baseline justify-between border-t border-slate-200 pt-2">
             <Text className="text-base font-bold text-slate-800">TOTAL</Text>
             <Text className="text-2xl font-extrabold text-emerald-600">₱{cart.total.toFixed(2)}</Text>
           </View>
@@ -505,7 +505,7 @@ export default function POSScreen() {
               keyboardType="decimal-pad"
               placeholder="0.00"
               placeholderTextColor="#94a3b8"
-              className="rounded-lg border border-emerald-200 bg-emerald-50/40 px-4 py-3 text-2xl font-bold text-slate-900"
+              className="rounded-lg border border-emerald-200 bg-slate-50 px-4 py-3 text-2xl font-bold text-slate-900"
             />
             <View className="mt-2 flex-row flex-wrap gap-2">
               <QuickCash label="Exact" onPress={() => setCashInput(cart.total.toFixed(2))} />
@@ -582,7 +582,7 @@ export default function POSScreen() {
             </View>
 
             <Text className="text-center text-sm font-semibold text-slate-700">
-              CM Pharmacy — {receipt?.branchName}
+              Maun Pharmacy — {receipt?.branchName}
             </Text>
             <Text className="mb-3 text-center text-[11px] text-slate-500">
               {receipt?.date.toLocaleString()} • Cashier: {receipt?.cashier}
@@ -615,7 +615,7 @@ export default function POSScreen() {
                 </Text>
               </View>
             )}
-            <View className="mt-1 flex-row items-baseline justify-between border-t border-emerald-100 pt-1">
+            <View className="mt-1 flex-row items-baseline justify-between border-t border-slate-200 pt-1">
               <Text className="text-base font-bold text-slate-800">TOTAL</Text>
               <Text className="text-xl font-extrabold text-emerald-600">
                 ₱{receipt?.total.toFixed(2)}

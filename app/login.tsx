@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Animated, {
   Easing,
   FadeIn,
@@ -15,10 +15,11 @@ import Animated, {
 import { useRouter } from "expo-router";
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, ShieldCheck, User } from "lucide-react-native";
 import { useAuth } from "@/auth/AuthContext";
+import { colors } from "@/ui/theme";
 
-const EMERALD = "#059669";
-const EMERALD_DARK = "#047857";
-const SLATE = "#64748b";
+const EMERALD = colors.emerald;
+const EMERALD_DARK = colors.emeraldDark;
+const SLATE = colors.textMuted;
 
 type LoginState = "idle" | "loading" | "success";
 
@@ -77,20 +78,20 @@ export default function Login() {
   };
 
   return (
-    <View className="flex-1 items-center justify-center bg-emerald-50 px-8">
+    <View className="flex-1 items-center justify-center bg-slate-50 px-8">
       <Animated.View
         entering={FadeIn.duration(400).easing(fastOut)}
         className="absolute inset-0"
         pointerEvents="none"
       >
-        <View className="absolute -left-24 top-24 h-72 w-72 rounded-full bg-emerald-200 opacity-50" />
-        <View className="absolute -right-20 bottom-20 h-80 w-80 rounded-full bg-green-200 opacity-50" />
-        <View className="absolute right-1/4 top-1/3 h-40 w-40 rounded-full bg-teal-200 opacity-40" />
+        <View className="absolute -left-24 top-24 h-72 w-72 rounded-full bg-emerald-200 opacity-25" />
+        <View className="absolute -right-20 bottom-20 h-80 w-80 rounded-full bg-green-200 opacity-25" />
+        <View className="absolute right-1/4 top-1/3 h-40 w-40 rounded-full bg-teal-200 opacity-20" />
       </Animated.View>
 
       <Animated.View
         entering={FadeInDown.duration(320).easing(fastOut)}
-        className="w-full max-w-md overflow-hidden rounded-2xl border border-emerald-100 bg-white p-8"
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-8"
         style={{
           shadowColor: "#000",
           shadowOpacity: 0.08,
@@ -102,22 +103,19 @@ export default function Login() {
         <View className="mb-6 items-center">
           <Animated.View
             entering={ZoomIn.duration(280).delay(80).easing(fastOut)}
-            className="mb-3 h-16 w-16 items-center justify-center rounded-full bg-emerald-600"
-            style={{
-              shadowColor: EMERALD,
-              shadowOpacity: 0.4,
-              shadowRadius: 12,
-              shadowOffset: { width: 0, height: 4 },
-              elevation: 6,
-            }}
+            className="mb-3"
           >
-            <Lock size={28} color="#fff" />
+            <Image
+              source={require("../assets/logo.png")}
+              style={{ width: 104, height: 104 }}
+              resizeMode="contain"
+            />
           </Animated.View>
           <Animated.Text
             entering={FadeInUp.duration(260).delay(120).easing(fastOut)}
             className="text-2xl font-bold text-slate-800"
           >
-            CM Pharmacy POS
+            Maun Pharmacy
           </Animated.Text>
           <Animated.Text
             entering={FadeInUp.duration(260).delay(160).easing(fastOut)}
@@ -216,13 +214,6 @@ export default function Login() {
             </View>
           </TouchableOpacity>
         </Animated.View>
-
-        <Animated.Text
-          entering={FadeIn.duration(260).delay(360)}
-          className="mt-6 text-center text-[11px] text-slate-400"
-        >
-          {process.env.EXPO_PUBLIC_API_BASE_URL ?? "API not configured"}
-        </Animated.Text>
 
         {isBusy && (
           <Animated.View

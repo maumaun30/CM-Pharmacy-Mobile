@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { clearToken, getToken, setToken } from "@/api/client";
+import { clearToken, getToken, setToken, setUnauthorizedHandler } from "@/api/client";
 import { login as loginApi, me as meApi } from "@/api/auth";
 
 export interface AuthUser {
@@ -8,6 +8,9 @@ export interface AuthUser {
   username: string;
   email?: string;
   role: "admin" | "manager" | "cashier";
+  // Expanded capability list from the API (config/permissions.js). Gate UI via
+  // the `can()` helper in src/auth/permissions.ts, never on `role` directly.
+  permissions?: string[];
   first_name: string;
   last_name: string;
   contact_number?: string;
@@ -60,6 +63,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refreshUser();
   }, [refreshUser]);
+
+  // If any API call 401s (expired/invalid token), reset to a signed-out state so
+  // the router sends the user back to /login. The token is already cleared by the
+  // interceptor before this fires.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setUser(null);
+      router.replace("/login");
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [router]);
 
   const signIn = useCallback(async (username: string, password: string) => {
     const { token } = await loginApi(username, password);

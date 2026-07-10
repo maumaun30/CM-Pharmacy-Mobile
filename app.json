@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CM Pharmacy POS",
+    "name": "Maun Pharmacy",
     "slug": "cm-pharmacy",
     "scheme": "cmpharmacy",
     "version": "1.0.1",
@@ -29,11 +29,6 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.BLUETOOTH",
-        "android.permission.BLUETOOTH_ADMIN",
-        "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.BLUETOOTH_SCAN",
-        "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT",
