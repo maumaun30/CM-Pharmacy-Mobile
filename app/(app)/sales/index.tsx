@@ -1,12 +1,16 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { TouchableOpacity as ListTouchableOpacity } from "react-native-gesture-handler";
 import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import { FlashList } from "@shopify/flash-list";
-import { Link } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Receipt, RotateCw, Search, ShoppingBag, User as UserIcon } from "lucide-react-native";
 import dayjs from "dayjs";
 import { listSales } from "@/api/sales";
+import { useAuth } from "@/auth/AuthContext";
+import { useBranchSocket } from "@/socket/useBranchSocket";
+import { fromApi } from "@/lib/date";
 import { colors, EASE } from "@/ui/theme";
 import { ScreenHeader } from "@/ui/ScreenHeader";
 import { Card } from "@/ui/Card";
@@ -30,6 +34,18 @@ export default function SalesList() {
     queryFn: () => listSales(),
   });
 
+  const { user } = useAuth();
+  const branchId = user?.current_branch_id ?? user?.branch_id ?? null;
+
+  // Real-time: refresh when a new sale lands on the branch socket, and whenever
+  // the Sales tab regains focus (e.g. right after ringing one up on POS).
+  useBranchSocket(branchId, { onNewSale: () => refetch() });
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch]),
+  );
+
   const [search, setSearch] = useState("");
 
   const sales: Sale[] = useMemo(() => {
@@ -46,7 +62,7 @@ export default function SalesList() {
     let count = 0;
     let total = 0;
     for (const s of sales) {
-      if (dayjs(s.soldAt).isAfter(today)) {
+      if (fromApi(s.soldAt).isAfter(today)) {
         count++;
         total += Number(s.totalAmount) || 0;
       }
@@ -121,7 +137,7 @@ export default function SalesList() {
             keyExtractor={(s) => String(s.id)}
             refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.emerald} />}
             contentContainerStyle={{ paddingBottom: 16 }}
-            renderItem={({ item, index }) => <SaleRow sale={item} index={index} />}
+            renderItem={({ item }) => <SaleRow sale={item} />}
           />
         </View>
       )}
@@ -129,14 +145,17 @@ export default function SalesList() {
   );
 }
 
-function SaleRow({ sale, index }: { sale: Sale; index: number }) {
+function SaleRow({ sale }: { sale: Sale }) {
+  const router = useRouter();
   const pill = saleStatusPill(sale.status);
   const itemCount = sale.items?.reduce((sum, i) => sum + (i.quantity ?? 0), 0) ?? 0;
 
   return (
-    <Animated.View entering={FadeInUp.duration(200).delay(Math.min(index, 10) * 18).easing(EASE)} className="mb-2">
-      <Link href={`/(app)/sales/${sale.id}` as any} asChild>
-        <TouchableOpacity activeOpacity={0.85}>
+    <ListTouchableOpacity
+      activeOpacity={0.85}
+      onPress={() => router.push(`/sales/${sale.id}` as any)}
+      className="mb-2"
+    >
           <Card className="flex-row items-center gap-3 p-3 active:bg-slate-50">
             <View className="h-11 w-11 items-center justify-center rounded-full bg-emerald-50">
               <ShoppingBag size={18} color={colors.emeraldDark} />
@@ -147,7 +166,7 @@ function SaleRow({ sale, index }: { sale: Sale; index: number }) {
                 <Pill label={pill.label} variant={pill.variant} />
               </View>
               <View className="mt-0.5 flex-row items-center gap-2">
-                <Text className="text-[11px] text-slate-500">{dayjs(sale.soldAt).format("MMM D, h:mm A")}</Text>
+                <Text className="text-[11px] text-slate-500">{fromApi(sale.soldAt).format("MMM D, h:mm A")}</Text>
                 {sale.seller?.name && (
                   <View className="flex-row items-center gap-1">
                     <UserIcon size={10} color={colors.textMuted} />
@@ -167,8 +186,6 @@ function SaleRow({ sale, index }: { sale: Sale; index: number }) {
             </View>
             <ChevronRight size={18} color={colors.textFaint} />
           </Card>
-        </TouchableOpacity>
-      </Link>
-    </Animated.View>
+    </ListTouchableOpacity>
   );
 }

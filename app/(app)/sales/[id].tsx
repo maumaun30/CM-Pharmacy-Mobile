@@ -25,6 +25,7 @@ import {
 } from "lucide-react-native";
 import dayjs from "dayjs";
 import { createRefund, listRefunds, listSales, type RefundPayload } from "@/api/sales";
+import { fromApi } from "@/lib/date";
 import { useAuth } from "@/auth/AuthContext";
 import { can } from "@/auth/permissions";
 import { colors, EASE } from "@/ui/theme";
@@ -185,7 +186,7 @@ export default function SaleDetail() {
           <View className="flex-1">
             <Text className="text-lg font-bold text-slate-800">Sale #{sale.id}</Text>
             <Text className="text-xs text-slate-500">
-              {dayjs(sale.soldAt).format("MMM D, YYYY • h:mm A")}
+              {fromApi(sale.soldAt).format("MMM D, YYYY • h:mm A")}
             </Text>
           </View>
           <Pill label={pill.label} variant={pill.variant} />
@@ -201,7 +202,7 @@ export default function SaleDetail() {
             {sale.seller?.name ?? "—"}
           </MetaRow>
           <MetaRow icon={<Calendar size={14} color={EMERALD_DARK} />} label="Time">
-            {dayjs(sale.soldAt).format("MMM D, YYYY h:mm:ss A")}
+            {fromApi(sale.soldAt).format("MMM D, YYYY h:mm:ss A")}
           </MetaRow>
         </View>
       </Animated.View>
@@ -410,7 +411,7 @@ export default function SaleDetail() {
                     </Text>
                   </View>
                   <Text className="text-[11px] text-slate-500">
-                    {dayjs(r.createdAt).format("MMM D, YYYY • h:mm A")}
+                    {fromApi(r.createdAt).format("MMM D, YYYY • h:mm A")}
                     {r.refundedBy ? ` • by ${r.refundedBy.name}` : ""}
                   </Text>
                   {r.items.map((it) => (
