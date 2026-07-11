@@ -1,9 +1,11 @@
 import * as SecureStore from "expo-secure-store";
+import { PermissionsAndroid, Platform } from "react-native";
+import RNBluetoothClassic from "react-native-bluetooth-classic";
 import { buildReceiptText, type ReceiptData } from "./receiptTemplate";
 
 const PRINTER_KEY = "printer_mac";
 
-// ─── Paired-printer persistence (works today, no hardware needed) ─────────────
+// ─── Paired-printer persistence ───────────────────────────────────────────────
 export async function getSavedPrinterMac(): Promise<string | null> {
   return SecureStore.getItemAsync(PRINTER_KEY);
 }
@@ -15,41 +17,53 @@ export async function clearPrinterMac(): Promise<void> {
 }
 
 // ─── ESC/POS raw command sequences ────────────────────────────────────────────
-// Standard ESC/POS control codes. `DRAWER_KICK` opens a cash drawer wired to the
-// printer's RJ11 port (pin 2, 25ms/250ms pulse) — this is how the "cashier"
-// drawer is triggered: it is not a separate Bluetooth device, it hangs off the
-// thermal printer.
+// DRAWER_KICK opens a cash drawer wired to the printer's RJ11 port (pin 2) — the
+// "cashier" drawer is not a separate Bluetooth device, it hangs off the printer.
 export const ESCPOS = {
   INIT: [0x1b, 0x40], // ESC @  — reset printer
   CUT: [0x1d, 0x56, 0x00], // GS V 0 — full cut
   DRAWER_KICK: [0x1b, 0x70, 0x00, 0x19, 0xfa], // ESC p 0 25 250 — open drawer
 } as const;
 
-// ─── Native module wiring (single point) ──────────────────────────────────────
-// Real Bluetooth printing needs `react-native-bluetooth-escpos-printer`, a native
-// module that only runs in a custom dev build (NOT Expo Go). Install it after
-// `expo prebuild`, then uncomment the require below — every function routes
-// through `getPrinter()` so this is the only place to wire it.
-//
-//   npx expo install react-native-bluetooth-escpos-printer
-//   npx expo prebuild && npx expo run:android
-type BtPrinter = {
-  BluetoothManager: { connect(mac: string): Promise<void> };
-  BluetoothEscposPrinter: {
-    printerInit(): Promise<void>;
-    printText(text: string, opts: object): Promise<void>;
-    printRaw(base64: string): Promise<void>;
-    cutLine(): Promise<void>;
-  };
-};
+// ─── Bluetooth Classic (SPP) transport ────────────────────────────────────────
 
-function getPrinter(): BtPrinter | null {
-  try {
-    // return require("react-native-bluetooth-escpos-printer");
-    return null; // stub until the native module + a dev build are in place
-  } catch {
-    return null;
+/** Android 12+ requires the BLUETOOTH_CONNECT runtime permission for bonded
+ * devices + connect; the manifest permission alone is not enough. */
+async function ensureBtPermissions(): Promise<boolean> {
+  if (Platform.OS !== "android") return true;
+  if (typeof Platform.Version === "number" && Platform.Version < 31) return true;
+  const res = await PermissionsAndroid.requestMultiple([
+    PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+    PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+  ]);
+  return res["android.permission.BLUETOOTH_CONNECT"] === PermissionsAndroid.RESULTS.GRANTED;
+}
+
+export interface PairedDevice {
+  name: string;
+  address: string;
+}
+
+/** Bonded (already-paired-in-Android-settings) devices to choose from. */
+export async function listPairedDevices(): Promise<PairedDevice[]> {
+  const ok = await ensureBtPermissions();
+  if (!ok) throw new Error("Bluetooth permission denied");
+  if (!(await RNBluetoothClassic.isBluetoothEnabled())) {
+    await RNBluetoothClassic.requestBluetoothEnabled();
   }
+  const devices = await RNBluetoothClassic.getBondedDevices();
+  return devices.map((d) => ({ name: d.name || d.address, address: d.address }));
+}
+
+/** Ensure there's an open connection to `mac`, reusing an existing one. */
+async function connect(mac: string): Promise<void> {
+  const connected = await RNBluetoothClassic.getConnectedDevices().catch(() => []);
+  if (connected.some((d) => d.address === mac)) return;
+  await RNBluetoothClassic.connectToDevice(mac);
+}
+
+async function sendBytes(mac: string, bytes: number[]): Promise<void> {
+  await RNBluetoothClassic.writeToDevice(mac, toBase64(bytes), "base64");
 }
 
 export type PrinterResult = { ok: boolean; error?: string; preview: string };
@@ -63,21 +77,18 @@ export async function printReceipt(
   const mac = await getSavedPrinterMac();
   if (!mac) return { ok: false, error: "No printer paired", preview };
 
-  const printer = getPrinter();
-  if (!printer) {
-    // No native module yet: surface the built receipt so callers can show a
-    // preview and the flow stays testable without hardware.
-    return { ok: false, error: "Printer module not installed (dev build required)", preview };
-  }
-
   try {
-    await printer.BluetoothManager.connect(mac);
-    await printer.BluetoothEscposPrinter.printerInit();
-    await printer.BluetoothEscposPrinter.printText(preview, {});
-    await printer.BluetoothEscposPrinter.cutLine();
-    if (opts.openDrawer) {
-      await printer.BluetoothEscposPrinter.printRaw(toBase64(ESCPOS.DRAWER_KICK));
-    }
+    await ensureBtPermissions();
+    await connect(mac);
+    const payload = [
+      ...ESCPOS.INIT,
+      ...textToBytes(preview),
+      0x0a,
+      0x0a,
+      ...ESCPOS.CUT,
+      ...(opts.openDrawer ? ESCPOS.DRAWER_KICK : []),
+    ];
+    await sendBytes(mac, payload);
     return { ok: true, preview };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Print failed", preview };
@@ -88,22 +99,38 @@ export async function printReceipt(
 export async function kickCashDrawer(): Promise<{ ok: boolean; error?: string }> {
   const mac = await getSavedPrinterMac();
   if (!mac) return { ok: false, error: "No printer paired" };
-  const printer = getPrinter();
-  if (!printer) return { ok: false, error: "Printer module not installed (dev build required)" };
   try {
-    await printer.BluetoothManager.connect(mac);
-    await printer.BluetoothEscposPrinter.printRaw(toBase64(ESCPOS.DRAWER_KICK));
+    await ensureBtPermissions();
+    await connect(mac);
+    await sendBytes(mac, [...ESCPOS.DRAWER_KICK]);
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Drawer open failed" };
   }
 }
 
+// ─── Encoding helpers ─────────────────────────────────────────────────────────
+
+/** ASCII byte stream for the receipt text. Thermal printers use single-byte code
+ * pages, so map the few non-ASCII glyphs we emit and drop anything else. */
+function textToBytes(s: string): number[] {
+  const ascii = s
+    .replace(/—/g, "-")
+    .replace(/×/g, "x")
+    .replace(/₱/g, "P");
+  const bytes: number[] = [];
+  for (let i = 0; i < ascii.length; i++) {
+    const c = ascii.charCodeAt(i);
+    bytes.push(c > 0xff ? 0x3f /* '?' */ : c);
+  }
+  return bytes;
+}
+
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function toBase64(bytes: readonly number[]): string {
-  // ESC/POS raw bytes → base64 (what printRaw expects), without depending on
-  // Buffer/btoa (neither is reliably present in the RN runtime).
+  // Raw bytes → base64 (what writeToDevice expects with encoding "base64"),
+  // without depending on Buffer/btoa (neither is reliable in the RN runtime).
   let out = "";
   for (let i = 0; i < bytes.length; i += 3) {
     const b0 = bytes[i];

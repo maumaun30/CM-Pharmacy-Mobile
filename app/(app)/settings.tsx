@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import dayjs from "dayjs";
 import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import {
   Bluetooth,
@@ -18,7 +19,15 @@ import {
 import { useAuth } from "@/auth/AuthContext";
 import { getGoogleIdToken, GoogleCancelled, googleConfigured } from "@/auth/google";
 import { GoogleButton, GoogleG } from "@/ui/GoogleButton";
-import { clearPrinterMac, getSavedPrinterMac } from "@/hardware/escpos/printer";
+import {
+  clearPrinterMac,
+  getSavedPrinterMac,
+  savePrinterMac,
+  listPairedDevices,
+  printReceipt,
+  kickCashDrawer,
+  type PairedDevice,
+} from "@/hardware/escpos/printer";
 import { colors, EASE } from "@/ui/theme";
 import { ScreenHeader } from "@/ui/ScreenHeader";
 
@@ -31,10 +40,70 @@ export default function SettingsScreen() {
   const { user, signOut, linkGoogle, unlinkGoogle } = useAuth();
   const [printerMac, setPrinterMac] = useState<string | null>(null);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [pairOpen, setPairOpen] = useState(false);
+  const [pairDevices, setPairDevices] = useState<PairedDevice[]>([]);
+  const [pairLoading, setPairLoading] = useState(false);
+  const [printerBusy, setPrinterBusy] = useState(false);
 
   useEffect(() => {
     getSavedPrinterMac().then(setPrinterMac);
   }, []);
+
+  const openPair = async () => {
+    setPairOpen(true);
+    setPairLoading(true);
+    try {
+      setPairDevices(await listPairedDevices());
+    } catch (e: any) {
+      setPairOpen(false);
+      Alert.alert(
+        "Bluetooth",
+        e?.message ??
+          "Couldn't list devices. Pair the printer in Android Bluetooth settings first, then try again.",
+      );
+    } finally {
+      setPairLoading(false);
+    }
+  };
+
+  const selectDevice = async (d: PairedDevice) => {
+    await savePrinterMac(d.address);
+    setPrinterMac(d.address);
+    setPairOpen(false);
+  };
+
+  const testPrint = async () => {
+    if (printerBusy) return;
+    setPrinterBusy(true);
+    const res = await printReceipt(
+      {
+        branchName,
+        saleId: 0,
+        cashier: fullName,
+        date: dayjs().format("MMM D, YYYY h:mm A"),
+        lines: [{ name: "Test print", qty: 1, price: 0 }],
+        subtotal: 0,
+        discount: 0,
+        total: 0,
+        cash: 0,
+        change: 0,
+      },
+      { openDrawer: false },
+    );
+    setPrinterBusy(false);
+    Alert.alert(
+      res.ok ? "Test sent" : "Print failed",
+      res.ok ? "Check the printer output." : res.error ?? "Unknown error",
+    );
+  };
+
+  const openDrawer = async () => {
+    if (printerBusy) return;
+    setPrinterBusy(true);
+    const res = await kickCashDrawer();
+    setPrinterBusy(false);
+    if (!res.ok) Alert.alert("Cash drawer", res.error ?? "Failed to open");
+  };
 
   const onConnectGoogle = async () => {
     if (googleBusy) return;
@@ -278,11 +347,11 @@ export default function SettingsScreen() {
 
             <View className="mt-3 flex-row gap-2">
               <TouchableOpacity
-                onPress={() => Alert.alert("Coming soon", "Printer pairing UI will be wired next.")}
+                onPress={openPair}
                 activeOpacity={0.85}
                 className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2.5 active:bg-emerald-700"
               >
-                <Printer size={14} color="#fff" />
+                <Bluetooth size={14} color="#fff" />
                 <Text className="text-sm font-semibold text-white">
                   {printerMac ? "Re-pair" : "Pair Printer"}
                 </Text>
@@ -297,6 +366,34 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               )}
             </View>
+
+            {printerMac && (
+              <View className="mt-2 flex-row gap-2">
+                <TouchableOpacity
+                  onPress={testPrint}
+                  disabled={printerBusy}
+                  activeOpacity={0.85}
+                  className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white py-2.5 active:bg-emerald-50"
+                  style={{ opacity: printerBusy ? 0.6 : 1 }}
+                >
+                  {printerBusy ? (
+                    <ActivityIndicator size="small" color={EMERALD_DARK} />
+                  ) : (
+                    <Printer size={14} color={EMERALD_DARK} />
+                  )}
+                  <Text className="text-sm font-semibold text-emerald-700">Test print</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={openDrawer}
+                  disabled={printerBusy}
+                  activeOpacity={0.85}
+                  className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white py-2.5 active:bg-emerald-50"
+                  style={{ opacity: printerBusy ? 0.6 : 1 }}
+                >
+                  <Text className="text-sm font-semibold text-emerald-700">Open drawer</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </Animated.View>
 
@@ -354,6 +451,55 @@ export default function SettingsScreen() {
           <Text className="text-[11px] text-slate-500">Maun Pharmacy • v1.0.0</Text>
         </Animated.View>
       </ScrollView>
+
+      {/* ── Printer pairing modal (bonded Bluetooth devices) ──────────── */}
+      <Modal visible={pairOpen} transparent animationType="fade" onRequestClose={() => setPairOpen(false)}>
+        <View className="flex-1 items-center justify-center bg-black/40 p-6">
+          <View className="w-full max-w-md rounded-2xl bg-white p-5">
+            <View className="mb-3 flex-row items-center gap-2">
+              <Bluetooth size={18} color={EMERALD_DARK} />
+              <Text className="flex-1 text-base font-bold text-slate-800">Select printer</Text>
+              <TouchableOpacity onPress={() => setPairOpen(false)}>
+                <Text className="text-sm font-medium text-slate-500">Close</Text>
+              </TouchableOpacity>
+            </View>
+
+            {pairLoading ? (
+              <View className="items-center py-8">
+                <ActivityIndicator color={EMERALD} />
+                <Text className="mt-2 text-xs text-slate-500">Reading paired devices…</Text>
+              </View>
+            ) : pairDevices.length === 0 ? (
+              <Text className="py-6 text-center text-sm text-slate-500">
+                No paired devices. Pair the printer in Android Bluetooth settings first, then reopen this.
+              </Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 320 }}>
+                {pairDevices.map((d) => {
+                  const selected = d.address === printerMac;
+                  return (
+                    <TouchableOpacity
+                      key={d.address}
+                      onPress={() => selectDevice(d)}
+                      activeOpacity={0.85}
+                      className={`mb-2 flex-row items-center gap-3 rounded-xl border p-3 ${
+                        selected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"
+                      }`}
+                    >
+                      <BluetoothConnected size={16} color={selected ? EMERALD_DARK : SLATE} />
+                      <View className="flex-1">
+                        <Text className="text-sm font-semibold text-slate-800">{d.name}</Text>
+                        <Text className="text-[11px] text-slate-500">{d.address}</Text>
+                      </View>
+                      {selected && <Check size={16} color={EMERALD_DARK} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

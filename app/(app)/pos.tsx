@@ -27,6 +27,9 @@ import {
 } from "lucide-react-native";
 import { listProductsByBranch, type Product } from "@/api/products";
 import { createSale } from "@/api/sales";
+import dayjs from "dayjs";
+import { printReceipt } from "@/hardware/escpos/printer";
+import type { ReceiptData } from "@/hardware/escpos/receiptTemplate";
 import {
   applicableForProduct,
   calcDiscountedPrice,
@@ -189,6 +192,30 @@ export default function POSScreen() {
       };
       const result = await createSale(payload);
       const saleId = result?.saleId ?? null;
+
+      // Build the printable receipt from the cart BEFORE clearing it.
+      const receiptData: ReceiptData = {
+        branchName,
+        saleId: saleId ?? 0,
+        cashier: user?.username ?? "",
+        date: dayjs().format("MMM D, YYYY h:mm A"),
+        lines: cart.items.map((i) => ({
+          name: i.product.name,
+          qty: i.quantity,
+          price: i.product.price,
+          discountLabel: i.discountId != null ? "Discount" : undefined,
+          discountAmount:
+            i.discountedPrice != null
+              ? (i.product.price - i.discountedPrice) * i.quantity
+              : undefined,
+        })),
+        subtotal: cart.subtotal,
+        discount: cart.discount,
+        total: cart.total,
+        cash,
+        change,
+      };
+
       setReceipt({
         saleId,
         items: [...cart.items],
@@ -204,6 +231,15 @@ export default function POSScreen() {
       setCheckoutOpen(false);
       cart.clear();
       refetch();
+
+      // Auto-print + open the cash drawer. Fire-and-forget: a missing/failed
+      // printer must never block or fail a completed sale (the on-screen receipt
+      // is the fallback).
+      printReceipt(receiptData, { openDrawer: true }).then((res) => {
+        if (!res.ok && res.error && res.error !== "No printer paired") {
+          Alert.alert("Print", res.error);
+        }
+      });
     } catch (e: any) {
       Alert.alert("Checkout failed", e?.response?.data?.message ?? e?.message ?? "Unknown error");
     } finally {
