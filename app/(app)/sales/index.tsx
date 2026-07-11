@@ -1,13 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { TouchableOpacity as ListTouchableOpacity } from "react-native-gesture-handler";
 import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import { FlashList } from "@shopify/flash-list";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Receipt, RotateCw, Search, ShoppingBag, User as UserIcon } from "lucide-react-native";
+import { ChevronRight, Printer, Receipt, RotateCw, Search, ShoppingBag, User as UserIcon } from "lucide-react-native";
 import dayjs from "dayjs";
 import { listSales } from "@/api/sales";
+import { printReceipt } from "@/hardware/escpos/printer";
+import type { ReceiptData } from "@/hardware/escpos/receiptTemplate";
 import { useAuth } from "@/auth/AuthContext";
 import { useBranchSocket } from "@/socket/useBranchSocket";
 import { fromApi } from "@/lib/date";
@@ -22,10 +24,42 @@ interface Sale {
   totalAmount: number;
   totalDiscount: number;
   subtotal: number | null;
+  cashAmount: number | null;
+  changeAmount: number | null;
   soldAt: string;
   status: string | null;
+  branch?: { name: string } | null;
   seller?: { name: string } | null;
-  items: { id: number; quantity: number }[];
+  items: {
+    id: number;
+    quantity: number;
+    price: number;
+    discountedPrice: number | null;
+    discountAmount: number;
+    product: { name: string };
+  }[];
+}
+
+// Rebuild a printable receipt from a past sale (the list endpoint returns full
+// item detail). Used for reprinting from a sales row.
+function saleToReceiptData(s: Sale): ReceiptData {
+  return {
+    branchName: s.branch?.name ?? "",
+    saleId: s.id,
+    cashier: s.seller?.name ?? "",
+    date: fromApi(s.soldAt).format("MMM D, YYYY h:mm A"),
+    lines: s.items.map((i) => ({
+      name: i.product?.name ?? "Item",
+      qty: i.quantity,
+      price: i.price,
+      discountAmount: i.discountAmount || undefined,
+    })),
+    subtotal: s.subtotal ?? s.totalAmount,
+    discount: s.totalDiscount,
+    total: s.totalAmount,
+    cash: s.cashAmount ?? 0,
+    change: s.changeAmount ?? 0,
+  };
 }
 
 export default function SalesList() {
@@ -149,6 +183,20 @@ function SaleRow({ sale }: { sale: Sale }) {
   const router = useRouter();
   const pill = saleStatusPill(sale.status);
   const itemCount = sale.items?.reduce((sum, i) => sum + (i.quantity ?? 0), 0) ?? 0;
+  const [printing, setPrinting] = useState(false);
+
+  const reprint = async () => {
+    if (printing) return;
+    setPrinting(true);
+    const res = await printReceipt(saleToReceiptData(sale), { openDrawer: false });
+    setPrinting(false);
+    if (!res.ok) {
+      Alert.alert(
+        res.error === "No printer paired" ? "No printer paired" : "Print failed",
+        res.error ?? "Unknown error",
+      );
+    }
+  };
 
   return (
     <ListTouchableOpacity
@@ -183,6 +231,18 @@ function SaleRow({ sale }: { sale: Sale }) {
                 <Text className="text-[11px] font-medium text-emerald-700">−₱{Number(sale.totalDiscount).toFixed(2)}</Text>
               )}
             </View>
+            <ListTouchableOpacity
+              onPress={reprint}
+              disabled={printing}
+              className="items-center justify-center rounded-md border border-emerald-200 bg-white p-2 active:bg-emerald-50"
+              style={{ opacity: printing ? 0.6 : 1 }}
+            >
+              {printing ? (
+                <ActivityIndicator size="small" color={colors.emeraldDark} />
+              ) : (
+                <Printer size={16} color={colors.emeraldDark} />
+              )}
+            </ListTouchableOpacity>
             <ChevronRight size={18} color={colors.textFaint} />
           </Card>
     </ListTouchableOpacity>

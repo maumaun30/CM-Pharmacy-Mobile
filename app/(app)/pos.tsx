@@ -28,7 +28,7 @@ import {
 import { listProductsByBranch, type Product } from "@/api/products";
 import { createSale } from "@/api/sales";
 import dayjs from "dayjs";
-import { printReceipt } from "@/hardware/escpos/printer";
+import { printReceipt, kickCashDrawer } from "@/hardware/escpos/printer";
 import type { ReceiptData } from "@/hardware/escpos/receiptTemplate";
 import {
   applicableForProduct,
@@ -76,6 +76,8 @@ export default function POSScreen() {
   const [cashInput, setCashInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [printData, setPrintData] = useState<ReceiptData | null>(null);
+  const [printing, setPrinting] = useState(false);
   const [discountFor, setDiscountFor] = useState<CartItem | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
@@ -228,22 +230,32 @@ export default function POSScreen() {
         branchName,
         cashier: user?.username ?? "",
       });
+      setPrintData(receiptData);
       setCheckoutOpen(false);
       cart.clear();
       refetch();
 
-      // Auto-print + open the cash drawer. Fire-and-forget: a missing/failed
-      // printer must never block or fail a completed sale (the on-screen receipt
-      // is the fallback).
-      printReceipt(receiptData, { openDrawer: true }).then((res) => {
-        if (!res.ok && res.error && res.error !== "No printer paired") {
-          Alert.alert("Print", res.error);
-        }
-      });
+      // Open the cash drawer automatically for cash handling. Printing the
+      // receipt is now an explicit choice from the completion screen. Both are
+      // fire-and-forget: a missing/failed printer never blocks a completed sale.
+      kickCashDrawer();
     } catch (e: any) {
       Alert.alert("Checkout failed", e?.response?.data?.message ?? e?.message ?? "Unknown error");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function printCurrentReceipt() {
+    if (!printData || printing) return;
+    setPrinting(true);
+    const res = await printReceipt(printData, { openDrawer: false });
+    setPrinting(false);
+    if (!res.ok) {
+      Alert.alert(
+        res.error === "No printer paired" ? "No printer paired" : "Print failed",
+        res.error ?? "Unknown error",
+      );
     }
   }
 
@@ -764,18 +776,25 @@ export default function POSScreen() {
 
             <View className="mt-4 flex-row gap-2">
               <TouchableOpacity
-                onPress={() => setReceipt(null)}
+                onPress={printCurrentReceipt}
+                disabled={printing}
                 activeOpacity={0.85}
-                className="flex-1 rounded-lg border border-emerald-300 bg-white py-3 active:bg-emerald-50"
+                className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-emerald-300 bg-white py-3 active:bg-emerald-50"
+                style={{ opacity: printing ? 0.6 : 1 }}
               >
-                <Text className="text-center text-sm font-semibold text-emerald-700">Done</Text>
+                {printing ? (
+                  <ActivityIndicator size="small" color={EMERALD_DARK} />
+                ) : (
+                  <Printer size={16} color={EMERALD_DARK} />
+                )}
+                <Text className="text-center text-sm font-semibold text-emerald-700">Print Receipt</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => setReceipt(null)}
                 activeOpacity={0.85}
                 className="flex-1 flex-row items-center justify-center gap-1 rounded-lg bg-emerald-600 py-3 active:bg-emerald-700"
               >
-                <Printer size={16} color="#fff" />
+                <Plus size={16} color="#fff" />
                 <Text className="text-center text-sm font-semibold text-white">New Sale</Text>
               </TouchableOpacity>
             </View>
