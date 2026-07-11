@@ -31,7 +31,13 @@ export function useBranchSocket(branchId: number | null | undefined, events: Bra
       const token = await getToken();
       if (cancelled || !token) return;
 
-      socket = io(url, { transports: ["websocket"], auth: { token } });
+      // Try websocket first, but fall back to HTTP long-polling: some tablet
+      // networks / proxies block the wss upgrade, and websocket-only leaves the
+      // socket permanently "offline" with no fallback. The server supports both.
+      socket = io(url, {
+        transports: ["websocket", "polling"],
+        auth: { token },
+      });
       socketRef.current = socket;
 
       socket.on("connect", () => {
