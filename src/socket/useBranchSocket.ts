@@ -31,11 +31,12 @@ export function useBranchSocket(branchId: number | null | undefined, events: Bra
       const token = await getToken();
       if (cancelled || !token) return;
 
-      // Try websocket first, but fall back to HTTP long-polling: some tablet
-      // networks / proxies block the wss upgrade, and websocket-only leaves the
-      // socket permanently "offline" with no fallback. The server supports both.
+      // Lead with HTTP long-polling, then upgrade to websocket if the network
+      // allows it. Some tablet networks / proxies block the wss handshake, and a
+      // websocket-first config loops on "websocket error" instead of falling
+      // back. Polling-first connects immediately and upgrades opportunistically.
       socket = io(url, {
-        transports: ["websocket", "polling"],
+        transports: ["polling", "websocket"],
         auth: { token },
       });
       socketRef.current = socket;
