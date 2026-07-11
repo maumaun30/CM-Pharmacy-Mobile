@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { Easing, FadeIn, FadeInDown, FadeInRight, LinearTransition, ZoomIn } from "react-native-reanimated";
@@ -13,6 +13,7 @@ import {
   Minus,
   Plus,
   Printer,
+  RefreshCw,
   Scan,
   Search,
   ShoppingCart,
@@ -142,6 +143,16 @@ export default function POSScreen() {
     [cart, focusScanner],
   );
 
+  // Refresh products whenever the POS screen regains focus (returning from
+  // another tab, or after products change on the web admin). This is the safety
+  // net for when the live socket is down — pull-to-refresh / the header reload
+  // button cover the "stay on this screen" case.
+  useFocusEffect(
+    useCallback(() => {
+      if (branchId) refetch();
+    }, [branchId, refetch]),
+  );
+
   const cash = parseFloat(cashInput) || 0;
   const change = cash - cart.total;
   const branchName = user?.currentBranch?.name ?? user?.branch?.name ?? "—";
@@ -230,6 +241,18 @@ export default function POSScreen() {
             <Scan size={14} color={SLATE} />
             <Text className="text-xs text-slate-500">{user?.username}</Text>
           </View>
+          <TouchableOpacity
+            onPress={() => refetch()}
+            disabled={isFetching || !branchId}
+            className="h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white"
+            style={{ opacity: isFetching || !branchId ? 0.5 : 1 }}
+          >
+            {isFetching ? (
+              <ActivityIndicator size="small" color={SLATE} />
+            ) : (
+              <RefreshCw size={14} color={SLATE} />
+            )}
+          </TouchableOpacity>
           <View className="flex-row items-center gap-0.5 rounded-md border border-slate-200 bg-white p-0.5">
             <TouchableOpacity
               onPress={() => setViewMode("grid")}
@@ -301,17 +324,40 @@ export default function POSScreen() {
               </Text>
             </View>
           ) : filtered.length === 0 ? (
-            <View className="flex-1 items-center justify-center px-6">
+            <ScrollView
+              contentContainerStyle={{
+                flexGrow: 1,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: 24,
+              }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isFetching}
+                  onRefresh={refetch}
+                  colors={[EMERALD]}
+                  tintColor={EMERALD}
+                />
+              }
+            >
               <View className="mb-3 h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
                 <Search size={28} color="#a7f3d0" />
               </View>
               <Text className="text-base font-semibold text-slate-700">
-                {isFetching ? "Loading products..." : "No products match"}
+                {isFetching
+                  ? "Loading products..."
+                  : search.trim()
+                    ? "No products match"
+                    : "No products loaded"}
               </Text>
               <Text className="mt-1 text-sm text-slate-500">
-                {isFetching ? "" : "Try a different search term."}
+                {isFetching
+                  ? ""
+                  : search.trim()
+                    ? "Try a different search term."
+                    : "Pull down to refresh."}
               </Text>
-            </View>
+            </ScrollView>
           ) : (
             <FlashList
               key={viewMode}
@@ -319,6 +365,14 @@ export default function POSScreen() {
               keyExtractor={(item) => String(item.id)}
               numColumns={viewMode === "grid" ? 4 : 1}
               contentContainerStyle={{ padding: 8 }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isFetching}
+                  onRefresh={refetch}
+                  colors={[EMERALD]}
+                  tintColor={EMERALD}
+                />
+              }
               renderItem={({ item, index }) =>
                 viewMode === "grid" ? (
                   <ProductCard product={item} onPress={() => addToCart(item, 1)} index={index} />
