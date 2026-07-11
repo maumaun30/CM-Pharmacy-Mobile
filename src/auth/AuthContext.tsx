@@ -1,7 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { clearToken, getToken, setToken, setUnauthorizedHandler } from "@/api/client";
-import { login as loginApi, me as meApi } from "@/api/auth";
+import {
+  login as loginApi,
+  me as meApi,
+  googleLogin as googleLoginApi,
+  linkGoogle as linkGoogleApi,
+  unlinkGoogle as unlinkGoogleApi,
+} from "@/api/auth";
 
 export interface AuthUser {
   id: number;
@@ -19,12 +25,18 @@ export interface AuthUser {
   is_active: boolean;
   branch?: { id: number; name: string; code: string; is_active: boolean };
   currentBranch?: { id: number; name: string; code: string; is_active: boolean };
+  // Google account linking (from /auth/me). google_linked is derived server-side.
+  google_linked?: boolean;
+  google_email?: string | null;
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   signIn: (username: string, password: string) => Promise<void>;
+  signInWithGoogle: (idToken: string) => Promise<void>;
+  linkGoogle: (idToken: string) => Promise<void>;
+  unlinkGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -33,6 +45,9 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   loading: true,
   signIn: async () => {},
+  signInWithGoogle: async () => {},
+  linkGoogle: async () => {},
+  unlinkGoogle: async () => {},
   signOut: async () => {},
   refreshUser: async () => {},
 });
@@ -82,6 +97,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(full);
   }, []);
 
+  // Google login: exchange the Google ID token for our JWT (same shape as signIn).
+  const signInWithGoogle = useCallback(async (idToken: string) => {
+    const { token } = await googleLoginApi(idToken);
+    await setToken(token);
+    const full = await meApi();
+    setUser(full);
+  }, []);
+
+  // Link/unlink the currently signed-in user's Google account, then re-fetch so
+  // google_linked/google_email update in the UI.
+  const linkGoogle = useCallback(
+    async (idToken: string) => {
+      await linkGoogleApi(idToken);
+      await refreshUser();
+    },
+    [refreshUser],
+  );
+
+  const unlinkGoogle = useCallback(async () => {
+    await unlinkGoogleApi();
+    await refreshUser();
+  }, [refreshUser]);
+
   const signOut = useCallback(async () => {
     await clearToken();
     setUser(null);
@@ -89,7 +127,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut, refreshUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        signIn,
+        signInWithGoogle,
+        linkGoogle,
+        unlinkGoogle,
+        signOut,
+        refreshUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

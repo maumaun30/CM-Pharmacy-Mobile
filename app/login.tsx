@@ -15,6 +15,8 @@ import Animated, {
 import { useRouter } from "expo-router";
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, ShieldCheck, User } from "lucide-react-native";
 import { useAuth } from "@/auth/AuthContext";
+import { getGoogleIdToken, GoogleCancelled, googleConfigured } from "@/auth/google";
+import { GoogleButton } from "@/ui/GoogleButton";
 import { colors } from "@/ui/theme";
 
 const EMERALD = colors.emerald;
@@ -24,7 +26,7 @@ const SLATE = colors.textMuted;
 type LoginState = "idle" | "loading" | "success";
 
 export default function Login() {
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -72,6 +74,27 @@ export default function Login() {
       setTimeout(() => router.replace("/(app)/pos"), 550);
     } catch (e: any) {
       setError(e?.response?.data?.message ?? e?.message ?? "Login failed. Please try again.");
+      setState("idle");
+      triggerShake();
+    }
+  };
+
+  const onGoogle = async () => {
+    if (isBusy) return;
+    setError(null);
+    setState("loading");
+    try {
+      const idToken = await getGoogleIdToken();
+      await signInWithGoogle(idToken);
+      setState("success");
+      setTimeout(() => router.replace("/(app)/pos"), 550);
+    } catch (e: any) {
+      // A dismissed Google sheet is not an error — just return to the form.
+      if (e instanceof GoogleCancelled) {
+        setState("idle");
+        return;
+      }
+      setError(e?.response?.data?.message ?? e?.message ?? "Google sign-in failed.");
       setState("idle");
       triggerShake();
     }
@@ -214,6 +237,17 @@ export default function Login() {
             </View>
           </TouchableOpacity>
         </Animated.View>
+
+        {googleConfigured && (
+          <Animated.View entering={FadeInUp.duration(260).delay(320).easing(fastOut)}>
+            <View className="my-4 flex-row items-center gap-3">
+              <View className="h-px flex-1 bg-slate-200" />
+              <Text className="text-xs font-medium text-slate-400">or continue with</Text>
+              <View className="h-px flex-1 bg-slate-200" />
+            </View>
+            <GoogleButton onPress={onGoogle} label="Sign in with Google" disabled={isBusy} />
+          </Animated.View>
+        )}
 
         {isBusy && (
           <Animated.View

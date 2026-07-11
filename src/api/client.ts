@@ -46,7 +46,10 @@ api.interceptors.response.use(
     const status = error?.response?.status;
     const url: string = error?.config?.url ?? "";
     // Don't hijack a failed sign-in: the login screen surfaces those 401s itself.
-    const isLoginAttempt = url.includes("/auth/login");
+    // Covers password login and Google login (POST /auth/google) — but NOT
+    // /auth/google/link, where a 401 genuinely means the session expired.
+    const isLoginAttempt =
+      url.includes("/auth/login") || /\/auth\/google(\?|$)/.test(url);
     if (status === 401 && !isLoginAttempt) {
       await clearToken();
       onUnauthorized?.();

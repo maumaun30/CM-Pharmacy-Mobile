@@ -5,14 +5,19 @@ import {
   Bluetooth,
   BluetoothConnected,
   Building2,
+  Check,
+  Link2,
   LogOut,
   Printer,
   Scan,
   Server,
   ShieldCheck,
+  Unlink,
   User as UserIcon,
 } from "lucide-react-native";
 import { useAuth } from "@/auth/AuthContext";
+import { getGoogleIdToken, GoogleCancelled, googleConfigured } from "@/auth/google";
+import { GoogleButton, GoogleG } from "@/ui/GoogleButton";
 import { clearPrinterMac, getSavedPrinterMac } from "@/hardware/escpos/printer";
 import { colors, EASE } from "@/ui/theme";
 import { ScreenHeader } from "@/ui/ScreenHeader";
@@ -23,12 +28,58 @@ const SLATE = colors.textMuted;
 const fastOut = EASE;
 
 export default function SettingsScreen() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, linkGoogle, unlinkGoogle } = useAuth();
   const [printerMac, setPrinterMac] = useState<string | null>(null);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   useEffect(() => {
     getSavedPrinterMac().then(setPrinterMac);
   }, []);
+
+  const onConnectGoogle = async () => {
+    if (googleBusy) return;
+    setGoogleBusy(true);
+    try {
+      const idToken = await getGoogleIdToken();
+      await linkGoogle(idToken);
+    } catch (e: any) {
+      if (!(e instanceof GoogleCancelled)) {
+        Alert.alert(
+          "Couldn't connect Google",
+          e?.response?.data?.message ?? e?.message ?? "Please try again.",
+        );
+      }
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+
+  const confirmDisconnectGoogle = () => {
+    Alert.alert(
+      "Disconnect Google",
+      "You'll still sign in with your username, password, or PIN.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Disconnect",
+          style: "destructive",
+          onPress: async () => {
+            setGoogleBusy(true);
+            try {
+              await unlinkGoogle();
+            } catch (e: any) {
+              Alert.alert(
+                "Couldn't disconnect",
+                e?.response?.data?.message ?? e?.message ?? "Please try again.",
+              );
+            } finally {
+              setGoogleBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const initials =
     `${user?.first_name?.[0] ?? ""}${user?.last_name?.[0] ?? ""}`.toUpperCase() ||
@@ -125,6 +176,60 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
         </Animated.View>
+
+        {/* ── Linked accounts ──────────────────────────────────────── */}
+        {googleConfigured && (
+          <Animated.View
+            entering={FadeInUp.duration(260).delay(60).easing(fastOut)}
+            className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white"
+            style={{
+              shadowColor: "#000",
+              shadowOpacity: 0.04,
+              shadowRadius: 6,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: 2,
+            }}
+          >
+            <SectionHeader icon={<Link2 size={14} color={EMERALD_DARK} />} label="Linked Accounts" />
+            <View className="p-4">
+              <View className="flex-row items-center gap-3">
+                <View className="h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white">
+                  <GoogleG size={18} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-sm font-semibold text-slate-800">Google</Text>
+                  {user?.google_linked ? (
+                    <View className="flex-row items-center gap-1">
+                      <Check size={12} color={EMERALD} />
+                      <Text className="text-xs text-emerald-700" numberOfLines={1}>
+                        Connected{user.google_email ? ` · ${user.google_email}` : ""}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text className="text-xs text-slate-500">Not connected — sign in faster next time</Text>
+                  )}
+                </View>
+              </View>
+
+              <View className="mt-3">
+                {user?.google_linked ? (
+                  <TouchableOpacity
+                    onPress={confirmDisconnectGoogle}
+                    disabled={googleBusy}
+                    activeOpacity={0.85}
+                    className="flex-row items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 py-2.5 active:bg-red-100"
+                    style={{ opacity: googleBusy ? 0.6 : 1 }}
+                  >
+                    <Unlink size={14} color="#b91c1c" />
+                    <Text className="text-sm font-semibold text-red-700">Disconnect</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <GoogleButton onPress={onConnectGoogle} loading={googleBusy} />
+                )}
+              </View>
+            </View>
+          </Animated.View>
+        )}
 
         {/* ── Receipt printer ──────────────────────────────────────── */}
         <Animated.View
