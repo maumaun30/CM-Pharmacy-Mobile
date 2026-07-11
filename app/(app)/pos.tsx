@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { Easing, FadeIn, FadeInDown, FadeInRight, LinearTransition, ZoomIn } from "react-native-reanimated";
 import { FlashList } from "@shopify/flash-list";
@@ -100,9 +101,46 @@ export default function POSScreen() {
           ((p.barcode ?? "").toLowerCase() === code.toLowerCase() ||
             p.sku.toLowerCase() === code.toLowerCase()),
       );
-      if (found) cart.add(found, 1);
+      if (found) {
+        cart.add(found, 1);
+        setSearch(""); // exact hit → add it and reset the list for the next scan
+      } else {
+        setSearch(code); // no exact match → surface candidates to tap
+      }
     },
   });
+  const focusScanner = scanner.focus;
+
+  // Keep the off-screen scanner sink focused whenever the POS screen is active
+  // and no modal owns focus, so USB HID scans register without first tapping the
+  // search box. The ref-guard stops us stealing focus from the cash input.
+  const modalOpenRef = useRef(false);
+  modalOpenRef.current = checkoutOpen || !!receipt;
+  const focusSinkSoon = useCallback(() => {
+    // Delay lets a closing modal / dismissed keyboard release focus first.
+    setTimeout(() => {
+      if (!modalOpenRef.current) focusScanner();
+    }, 60);
+  }, [focusScanner]);
+
+  // Re-arm on screen focus (tab switch / navigating back) and when modals close.
+  useFocusEffect(
+    useCallback(() => {
+      focusSinkSoon();
+    }, [focusSinkSoon]),
+  );
+  useEffect(() => {
+    if (!checkoutOpen && !receipt) focusSinkSoon();
+  }, [checkoutOpen, receipt, focusSinkSoon]);
+
+  // Adding by tap also re-arms scanning (a tap can blur the sink).
+  const addToCart = useCallback(
+    (p: Product, qty = 1) => {
+      cart.add(p, qty);
+      focusScanner();
+    },
+    [cart, focusScanner],
+  );
 
   const cash = parseFloat(cashInput) || 0;
   const change = cash - cart.total;
@@ -232,6 +270,7 @@ export default function POSScreen() {
             <TextInput
               value={search}
               onChangeText={setSearch}
+              onBlur={focusSinkSoon}
               placeholder="Search by name, SKU, or barcode"
               placeholderTextColor="#94a3b8"
               className="flex-1 px-3 py-3 text-base text-slate-900"
@@ -282,9 +321,9 @@ export default function POSScreen() {
               contentContainerStyle={{ padding: 8 }}
               renderItem={({ item, index }) =>
                 viewMode === "grid" ? (
-                  <ProductCard product={item} onPress={() => cart.add(item, 1)} index={index} />
+                  <ProductCard product={item} onPress={() => addToCart(item, 1)} index={index} />
                 ) : (
-                  <ProductRow product={item} onPress={() => cart.add(item, 1)} index={index} />
+                  <ProductRow product={item} onPress={() => addToCart(item, 1)} index={index} />
                 )
               }
             />
