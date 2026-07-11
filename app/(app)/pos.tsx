@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Modal, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useFocusEffect } from "expo-router";
+// Core RN touchables don't receive presses inside a FlashList under
+// GestureHandlerRootView; the product rows use this gesture-handler variant.
+import { TouchableOpacity as ListTouchableOpacity } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { Easing, FadeIn, FadeInDown, FadeInRight, LinearTransition, ZoomIn } from "react-native-reanimated";
 import { FlashList } from "@shopify/flash-list";
@@ -897,20 +900,22 @@ function ProductCard({ product, onPress, index }: { product: Product; onPress: (
       layout={LinearTransition.duration(180)}
       className="m-1 flex-1"
     >
-      <TouchableOpacity
+      <ListTouchableOpacity
         onPress={onPress}
         activeOpacity={0.8}
         disabled={stock <= 0}
-        className="rounded-xl border border-slate-200 bg-white p-3 active:border-emerald-300 active:bg-emerald-50"
-        style={{
-          shadowColor: "#000",
-          shadowOpacity: 0.04,
-          shadowRadius: 4,
-          shadowOffset: { width: 0, height: 1 },
-          elevation: 1,
-          opacity: stock <= 0 ? 0.55 : 1,
-        }}
+        style={{ flex: 1, opacity: stock <= 0 ? 0.55 : 1 }}
       >
+        <View
+          className="flex-1 rounded-xl border border-slate-200 bg-white p-3"
+          style={{
+            shadowColor: "#000",
+            shadowOpacity: 0.04,
+            shadowRadius: 4,
+            shadowOffset: { width: 0, height: 1 },
+            elevation: 1,
+          }}
+        >
         <View className={`mb-2 self-start rounded-md px-2 py-0.5 ${sc.bg}`}>
           <Text className={`text-[10px] font-semibold ${sc.text}`}>
             {stock <= 0 ? "Out of stock" : `Stock ${stock}`}
@@ -921,7 +926,8 @@ function ProductCard({ product, onPress, index }: { product: Product; onPress: (
         </Text>
         <Text className="mt-0.5 text-[11px] text-slate-500">{product.sku}</Text>
         <Text className="mt-2 text-base font-bold text-emerald-600">₱{product.price.toFixed(2)}</Text>
-      </TouchableOpacity>
+        </View>
+      </ListTouchableOpacity>
     </Animated.View>
   );
 }
@@ -935,20 +941,22 @@ function ProductRow({ product, onPress, index }: { product: Product; onPress: ()
       layout={LinearTransition.duration(180)}
       className="px-1 py-0.5"
     >
-      <TouchableOpacity
+      <ListTouchableOpacity
         onPress={onPress}
         activeOpacity={0.8}
         disabled={stock <= 0}
-        className="flex-row items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 active:border-emerald-300 active:bg-emerald-50"
-        style={{
-          shadowColor: "#000",
-          shadowOpacity: 0.03,
-          shadowRadius: 4,
-          shadowOffset: { width: 0, height: 1 },
-          elevation: 1,
-          opacity: stock <= 0 ? 0.55 : 1,
-        }}
+        style={{ opacity: stock <= 0 ? 0.55 : 1 }}
       >
+        <View
+          className="flex-row items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"
+          style={{
+            shadowColor: "#000",
+            shadowOpacity: 0.03,
+            shadowRadius: 4,
+            shadowOffset: { width: 0, height: 1 },
+            elevation: 1,
+          }}
+        >
         <View className="flex-1">
           <View className="flex-row items-center gap-2">
             <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-800">
@@ -966,7 +974,8 @@ function ProductRow({ product, onPress, index }: { product: Product; onPress: ()
         <View className="h-8 w-8 items-center justify-center rounded-md bg-emerald-100">
           <Plus size={14} color={EMERALD_DARK} />
         </View>
-      </TouchableOpacity>
+        </View>
+      </ListTouchableOpacity>
     </Animated.View>
   );
 }

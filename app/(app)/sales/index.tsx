@@ -154,9 +154,8 @@ function SaleRow({ sale }: { sale: Sale }) {
     <ListTouchableOpacity
       activeOpacity={0.85}
       onPress={() => router.push(`/sales/${sale.id}` as any)}
-      className="mb-2"
     >
-          <Card className="flex-row items-center gap-3 p-3 active:bg-slate-50">
+          <Card className="mb-2 flex-row items-center gap-3 p-3 active:bg-slate-50">
             <View className="h-11 w-11 items-center justify-center rounded-full bg-emerald-50">
               <ShoppingBag size={18} color={colors.emeraldDark} />
             </View>
