@@ -17,6 +17,7 @@ import {
   Calendar,
   Minus,
   Plus,
+  Printer,
   Receipt,
   RotateCw,
   Tag,
@@ -25,6 +26,8 @@ import {
 } from "lucide-react-native";
 import dayjs from "dayjs";
 import { createRefund, listRefunds, listSales, type RefundPayload } from "@/api/sales";
+import { printReceipt } from "@/hardware/escpos/printer";
+import type { ReceiptData } from "@/hardware/escpos/receiptTemplate";
 import { fromApi } from "@/lib/date";
 import { useAuth } from "@/auth/AuthContext";
 import { can } from "@/auth/permissions";
@@ -78,10 +81,32 @@ interface RefundRecord {
   }[];
 }
 
+// Rebuild a printable receipt from the loaded sale, for reprinting.
+function saleToReceiptData(s: Sale): ReceiptData {
+  return {
+    branchName: s.branch?.name ?? "",
+    saleId: s.id,
+    cashier: s.seller?.name ?? "",
+    date: fromApi(s.soldAt).format("MMM D, YYYY h:mm A"),
+    lines: s.items.map((i) => ({
+      name: i.product?.name ?? "Item",
+      qty: i.quantity,
+      price: i.price,
+      discountAmount: i.discountAmount || undefined,
+    })),
+    subtotal: s.subtotal ?? s.totalAmount,
+    discount: s.totalDiscount,
+    total: s.totalAmount,
+    cash: s.cashAmount ?? 0,
+    change: s.changeAmount ?? 0,
+  };
+}
+
 export default function SaleDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const saleId = Number(id);
   const [refundOpen, setRefundOpen] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const { user } = useAuth();
   // Issuing refunds is a supervisor action (API: sales.refund → admin + manager).
   // Cashiers can still view the sale and its refund history, just not refund.
@@ -153,6 +178,19 @@ export default function SaleDetail() {
   const pill = saleStatusPill(sale.status);
   const subtotal = sale.subtotal ?? sale.items.reduce((s, i) => s + i.price * i.quantity, 0);
   const hasRefundActivity = refunds.length > 0 || /REFUND/i.test(sale.status ?? "");
+
+  const reprint = async () => {
+    if (printing || !sale) return;
+    setPrinting(true);
+    const res = await printReceipt(saleToReceiptData(sale), { openDrawer: false });
+    setPrinting(false);
+    if (!res.ok) {
+      Alert.alert(
+        res.error === "No printer paired" ? "No printer paired" : "Print failed",
+        res.error ?? "Unknown error",
+      );
+    }
+  };
 
   return (
     <ScrollView
@@ -328,12 +366,12 @@ export default function SaleDetail() {
         </View>
       </Animated.View>
 
-      {/* ── Refund actions (supervisors only) ────────────────────────── */}
-      {canRefund && (
-        <Animated.View
-          entering={FadeInUp.duration(240).delay(120).easing(fastOut)}
-          className="mb-3 flex-row gap-2"
-        >
+      {/* ── Actions: reprint (all roles) + refund (supervisors only) ──── */}
+      <Animated.View
+        entering={FadeInUp.duration(240).delay(120).easing(fastOut)}
+        className="mb-3 flex-row gap-2"
+      >
+        {canRefund && (
           <TouchableOpacity
             onPress={() => setRefundOpen(true)}
             disabled={refundable <= 0}
@@ -353,6 +391,22 @@ export default function SaleDetail() {
               {refundable <= 0 ? "Fully refunded" : "Process refund"}
             </Text>
           </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          onPress={reprint}
+          disabled={printing}
+          activeOpacity={0.85}
+          className="flex-1 flex-row items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white py-3 active:bg-emerald-50"
+          style={{ opacity: printing ? 0.6 : 1 }}
+        >
+          {printing ? (
+            <ActivityIndicator size="small" color={EMERALD_DARK} />
+          ) : (
+            <Printer size={16} color={EMERALD_DARK} />
+          )}
+          <Text className="text-sm font-semibold text-emerald-700">Reprint receipt</Text>
+        </TouchableOpacity>
+        {canRefund && (
           <TouchableOpacity
             onPress={() => refetchRefunds()}
             activeOpacity={0.85}
@@ -364,8 +418,8 @@ export default function SaleDetail() {
               <RotateCw size={16} color={EMERALD_DARK} />
             )}
           </TouchableOpacity>
-        </Animated.View>
-      )}
+        )}
+      </Animated.View>
 
       {/* ── Refund history ───────────────────────────────────────────── */}
       {hasRefundActivity && (

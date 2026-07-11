@@ -683,9 +683,9 @@ export default function POSScreen() {
                 opacity: submitting || cash < cart.total ? 0.6 : 1,
               }}
             >
-              <Printer size={18} color="#fff" />
+              <CheckCircle2 size={18} color="#fff" />
               <Text className="text-base font-semibold text-white">
-                {submitting ? "Processing..." : "Confirm & Print Receipt"}
+                {submitting ? "Processing..." : "Confirm"}
               </Text>
             </TouchableOpacity>
           </Animated.View>
