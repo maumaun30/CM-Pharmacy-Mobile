@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import dayjs from "dayjs";
 import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import {
@@ -7,6 +7,7 @@ import {
   BluetoothConnected,
   Building2,
   Check,
+  KeyRound,
   Link2,
   LogOut,
   Printer,
@@ -17,6 +18,7 @@ import {
   User as UserIcon,
 } from "lucide-react-native";
 import { useAuth } from "@/auth/AuthContext";
+import { changePassword } from "@/api/auth";
 import { getGoogleIdToken, GoogleCancelled, googleConfigured } from "@/auth/google";
 import { GoogleButton, GoogleG } from "@/ui/GoogleButton";
 import {
@@ -44,6 +46,12 @@ export default function SettingsScreen() {
   const [pairDevices, setPairDevices] = useState<PairedDevice[]>([]);
   const [pairLoading, setPairLoading] = useState(false);
   const [printerBusy, setPrinterBusy] = useState(false);
+  // Change-password modal
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwCurrent, setPwCurrent] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
 
   useEffect(() => {
     getSavedPrinterMac().then(setPrinterMac);
@@ -169,6 +177,41 @@ export default function SettingsScreen() {
     ]);
   };
 
+  const openChangePassword = () => {
+    setPwCurrent("");
+    setPwNew("");
+    setPwConfirm("");
+    setPwOpen(true);
+  };
+
+  const submitChangePassword = async () => {
+    if (!pwCurrent || !pwNew) {
+      Alert.alert("Missing fields", "Enter your current and new password.");
+      return;
+    }
+    if (pwNew.length < 6) {
+      Alert.alert("Weak password", "New password must be at least 6 characters.");
+      return;
+    }
+    if (pwNew !== pwConfirm) {
+      Alert.alert("Passwords don't match", "New password and confirmation must match.");
+      return;
+    }
+    setPwBusy(true);
+    try {
+      await changePassword(pwCurrent, pwNew);
+      setPwOpen(false);
+      Alert.alert("Password changed", "Your password has been updated.");
+    } catch (e: any) {
+      Alert.alert(
+        "Couldn't change password",
+        e?.response?.data?.message ?? e?.message ?? "Unknown error",
+      );
+    } finally {
+      setPwBusy(false);
+    }
+  };
+
   const confirmUnpair = async () => {
     Alert.alert("Unpair printer", "Remove the saved printer? You can re-pair anytime.", [
       { text: "Cancel", style: "cancel" },
@@ -234,7 +277,15 @@ export default function SettingsScreen() {
             </Text>
           </View>
 
-          <View className="border-t border-slate-200 p-3">
+          <View className="border-t border-slate-200 p-3 gap-2">
+            <TouchableOpacity
+              onPress={openChangePassword}
+              activeOpacity={0.85}
+              className="flex-row items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 py-3 active:bg-emerald-100"
+            >
+              <KeyRound size={16} color={EMERALD_DARK} />
+              <Text className="text-sm font-semibold text-emerald-700">Change Password</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={confirmSignOut}
               activeOpacity={0.85}
@@ -497,6 +548,61 @@ export default function SettingsScreen() {
                 })}
               </ScrollView>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Change password modal ─────────────────────────────────────── */}
+      <Modal visible={pwOpen} transparent animationType="fade" onRequestClose={() => setPwOpen(false)}>
+        <View className="flex-1 items-center justify-center bg-black/40 p-6">
+          <View className="w-full max-w-md rounded-2xl bg-white p-5">
+            <View className="mb-3 flex-row items-center gap-2">
+              <KeyRound size={18} color={EMERALD_DARK} />
+              <Text className="flex-1 text-base font-bold text-slate-800">Change password</Text>
+              <TouchableOpacity onPress={() => setPwOpen(false)} disabled={pwBusy}>
+                <Text className="text-sm font-medium text-slate-500">Close</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              value={pwCurrent}
+              onChangeText={setPwCurrent}
+              placeholder="Current password"
+              placeholderTextColor="#94a3b8"
+              secureTextEntry
+              className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-base text-slate-900"
+            />
+            <TextInput
+              value={pwNew}
+              onChangeText={setPwNew}
+              placeholder="New password (min 6 characters)"
+              placeholderTextColor="#94a3b8"
+              secureTextEntry
+              className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-base text-slate-900"
+            />
+            <TextInput
+              value={pwConfirm}
+              onChangeText={setPwConfirm}
+              placeholder="Confirm new password"
+              placeholderTextColor="#94a3b8"
+              secureTextEntry
+              className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-base text-slate-900"
+            />
+
+            <TouchableOpacity
+              onPress={submitChangePassword}
+              disabled={pwBusy}
+              activeOpacity={0.85}
+              className="flex-row items-center justify-center gap-2 rounded-lg bg-emerald-600 py-3 active:bg-emerald-700"
+              style={{ opacity: pwBusy ? 0.6 : 1 }}
+            >
+              {pwBusy ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <KeyRound size={16} color="#fff" />
+              )}
+              <Text className="text-sm font-semibold text-white">Update password</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

@@ -38,6 +38,9 @@ export async function getSale(saleId: number) {
 export interface RefundPayload {
   items: { saleItemId: number; quantity: number }[];
   reason?: string;
+  // A cashier (without refund permission) must supply a manager's PIN to
+  // authorize the refund; admins/managers omit it.
+  managerPin?: string;
 }
 
 export async function createRefund(saleId: number, payload: RefundPayload) {

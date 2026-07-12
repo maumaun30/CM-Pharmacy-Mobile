@@ -405,27 +405,29 @@ export default function SaleDetail() {
         entering={FadeInUp.duration(240).delay(120).easing(fastOut)}
         className="mb-3 flex-row gap-2"
       >
-        {canRefund && (
-          <TouchableOpacity
-            onPress={() => setRefundOpen(true)}
-            disabled={refundable <= 0}
-            activeOpacity={0.85}
-            className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 active:bg-emerald-700"
-            style={{
-              shadowColor: EMERALD_DARK,
-              shadowOpacity: refundable <= 0 ? 0 : 0.25,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 4 },
-              elevation: refundable <= 0 ? 0 : 4,
-              opacity: refundable <= 0 ? 0.5 : 1,
-            }}
-          >
-            <Undo2 size={16} color="#fff" />
-            <Text className="text-sm font-semibold text-white">
-              {refundable <= 0 ? "Fully refunded" : "Process refund"}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          onPress={() => setRefundOpen(true)}
+          disabled={refundable <= 0}
+          activeOpacity={0.85}
+          className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 active:bg-emerald-700"
+          style={{
+            shadowColor: EMERALD_DARK,
+            shadowOpacity: refundable <= 0 ? 0 : 0.25,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: refundable <= 0 ? 0 : 4,
+            opacity: refundable <= 0 ? 0.5 : 1,
+          }}
+        >
+          <Undo2 size={16} color="#fff" />
+          <Text className="text-sm font-semibold text-white">
+            {refundable <= 0
+              ? "Fully refunded"
+              : canRefund
+                ? "Process refund"
+                : "Request refund"}
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity
           onPress={reprint}
           disabled={printing}
@@ -532,6 +534,7 @@ export default function SaleDetail() {
         onClose={() => setRefundOpen(false)}
         sale={sale}
         refundedQtyByItem={refundedQtyByItem}
+        requirePin={!canRefund}
       />
     </ScrollView>
   );
@@ -542,15 +545,18 @@ function RefundModal({
   onClose,
   sale,
   refundedQtyByItem,
+  requirePin,
 }: {
   visible: boolean;
   onClose: () => void;
   sale: Sale;
   refundedQtyByItem: Map<number, number>;
+  requirePin: boolean;
 }) {
   const qc = useQueryClient();
   const [qtyByItem, setQtyByItem] = useState<Record<number, number>>({});
   const [reason, setReason] = useState("");
+  const [managerPin, setManagerPin] = useState("");
 
   const refundLines = useMemo(
     () =>
@@ -583,6 +589,7 @@ function RefundModal({
       qc.invalidateQueries({ queryKey: ["products"] });
       setQtyByItem({});
       setReason("");
+      setManagerPin("");
       onClose();
       Alert.alert("Refund processed", `₱${refundTotal.toFixed(2)} refunded successfully.`);
     },
@@ -604,7 +611,15 @@ function RefundModal({
       Alert.alert("Nothing to refund", "Pick at least one item to refund.");
       return;
     }
-    mutation.mutate({ items, reason: reason.trim() || undefined });
+    if (requirePin && !managerPin.trim()) {
+      Alert.alert("Manager PIN required", "Enter a manager's PIN to authorize this refund.");
+      return;
+    }
+    mutation.mutate({
+      items,
+      reason: reason.trim() || undefined,
+      managerPin: requirePin ? managerPin.trim() : undefined,
+    });
   }
 
   return (
@@ -702,6 +717,27 @@ function RefundModal({
             className="rounded-lg border border-emerald-200 bg-slate-50 px-3 py-2 text-sm text-slate-900"
             style={{ minHeight: 56, textAlignVertical: "top" }}
           />
+
+          {requirePin && (
+            <View className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <Text className="mb-2 text-sm font-semibold text-amber-800">
+                Manager authorization<Text className="text-red-500"> *</Text>
+              </Text>
+              <TextInput
+                value={managerPin}
+                onChangeText={(t) => setManagerPin(t.replace(/[^0-9]/g, ""))}
+                placeholder="Manager PIN"
+                placeholderTextColor="#94a3b8"
+                secureTextEntry
+                keyboardType="number-pad"
+                maxLength={6}
+                className="rounded-lg border border-amber-200 bg-white px-3 py-2.5 text-base tracking-widest text-slate-900"
+              />
+              <Text className="mt-1 text-[11px] text-amber-700">
+                A manager or admin must enter their PIN to approve this refund.
+              </Text>
+            </View>
+          )}
 
           <View className="mt-3 flex-row items-baseline justify-between border-t border-slate-200 pt-2">
             <Text className="text-sm text-slate-600">

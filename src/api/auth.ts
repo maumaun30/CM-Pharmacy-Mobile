@@ -11,6 +11,14 @@ export async function me(): Promise<AuthUser> {
   return res.data;
 }
 
+/** Change the signed-in user's own password (verifies the current one). */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  await api.put("/auth/change-password", { currentPassword, newPassword });
+}
+
 // ─── Google account linking ───────────────────────────────────────────────────
 
 /** Exchange a Google ID token for our JWT. 401 = Google account not linked yet. */
