@@ -25,7 +25,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react-native";
-import { listProductsByBranch, type Product } from "@/api/products";
+import { listProductsByBranch, stockLimit, type Product } from "@/api/products";
 import { createSale } from "@/api/sales";
 import dayjs from "dayjs";
 import { printReceipt, kickCashDrawer } from "@/hardware/escpos/printer";
@@ -111,7 +111,10 @@ export default function POSScreen() {
             p.sku.toLowerCase() === code.toLowerCase()),
       );
       if (found) {
-        cart.add(found, 1);
+        const { capped } = cart.add(found, 1);
+        if (capped) {
+          Alert.alert("Stock limit reached", `Only ${stockLimit(found)} in stock for ${found.name}.`);
+        }
         setSearch(""); // exact hit → add it and reset the list for the next scan
       } else {
         setSearch(code); // no exact match → surface candidates to tap
@@ -145,7 +148,10 @@ export default function POSScreen() {
   // Adding by tap also re-arms scanning (a tap can blur the sink).
   const addToCart = useCallback(
     (p: Product, qty = 1) => {
-      cart.add(p, qty);
+      const { capped } = cart.add(p, qty);
+      if (capped) {
+        Alert.alert("Stock limit reached", `Only ${stockLimit(p)} in stock for ${p.name}.`);
+      }
       focusScanner();
     },
     [cart, focusScanner],
@@ -550,12 +556,20 @@ export default function POSScreen() {
                       <Text className="min-w-[24px] text-center text-sm font-semibold text-slate-800">
                         {i.quantity}
                       </Text>
-                      <TouchableOpacity
-                        onPress={() => cart.setQty(i.product.id, i.quantity + 1)}
-                        className="h-7 w-7 items-center justify-center rounded-md border border-emerald-200 bg-white active:bg-emerald-50"
-                      >
-                        <Plus size={14} color={EMERALD_DARK} />
-                      </TouchableOpacity>
+                      {(() => {
+                        const limit = stockLimit(i.product);
+                        const atMax = limit != null && i.quantity >= limit;
+                        return (
+                          <TouchableOpacity
+                            onPress={() => cart.setQty(i.product.id, i.quantity + 1)}
+                            disabled={atMax}
+                            className="h-7 w-7 items-center justify-center rounded-md border border-emerald-200 bg-white active:bg-emerald-50"
+                            style={{ opacity: atMax ? 0.4 : 1 }}
+                          >
+                            <Plus size={14} color={EMERALD_DARK} />
+                          </TouchableOpacity>
+                        );
+                      })()}
                     </View>
                   </View>
                 </Animated.View>
@@ -947,8 +961,10 @@ function DiscountPicker({
 }
 
 function ProductCard({ product, onPress, index }: { product: Product; onPress: () => void; index: number }) {
-  const stock = product.currentStock ?? product.branch_stocks?.[0]?.current_stock ?? 0;
-  const sc = stockColor(stock);
+  const limit = stockLimit(product);
+  const tracked = limit != null;
+  const soldOut = tracked && limit <= 0;
+  const sc = stockColor(tracked ? limit : 1);
   return (
     <Animated.View
       entering={FadeIn.duration(180).delay(Math.min(index, 12) * 12).easing(fastOut)}
@@ -958,8 +974,8 @@ function ProductCard({ product, onPress, index }: { product: Product; onPress: (
       <ListTouchableOpacity
         onPress={onPress}
         activeOpacity={0.8}
-        disabled={stock <= 0}
-        style={{ flex: 1, opacity: stock <= 0 ? 0.55 : 1 }}
+        disabled={soldOut}
+        style={{ flex: 1, opacity: soldOut ? 0.55 : 1 }}
       >
         <View
           className="flex-1 rounded-xl border border-slate-200 bg-white p-3"
@@ -971,9 +987,9 @@ function ProductCard({ product, onPress, index }: { product: Product; onPress: (
             elevation: 1,
           }}
         >
-        <View className={`mb-2 self-start rounded-md px-2 py-0.5 ${sc.bg}`}>
-          <Text className={`text-[10px] font-semibold ${sc.text}`}>
-            {stock <= 0 ? "Out of stock" : `Stock ${stock}`}
+        <View className={`mb-2 self-start rounded-md px-2 py-0.5 ${tracked ? sc.bg : "bg-slate-100"}`}>
+          <Text className={`text-[10px] font-semibold ${tracked ? sc.text : "text-slate-500"}`}>
+            {!tracked ? "Non-stock" : soldOut ? "Out of stock" : `Stock ${limit}`}
           </Text>
         </View>
         <Text numberOfLines={2} className="text-sm font-semibold text-slate-800">
@@ -988,8 +1004,10 @@ function ProductCard({ product, onPress, index }: { product: Product; onPress: (
 }
 
 function ProductRow({ product, onPress, index }: { product: Product; onPress: () => void; index: number }) {
-  const stock = product.currentStock ?? product.branch_stocks?.[0]?.current_stock ?? 0;
-  const sc = stockColor(stock);
+  const limit = stockLimit(product);
+  const tracked = limit != null;
+  const soldOut = tracked && limit <= 0;
+  const sc = stockColor(tracked ? limit : 1);
   return (
     <Animated.View
       entering={FadeIn.duration(160).delay(Math.min(index, 12) * 8).easing(fastOut)}
@@ -999,8 +1017,8 @@ function ProductRow({ product, onPress, index }: { product: Product; onPress: ()
       <ListTouchableOpacity
         onPress={onPress}
         activeOpacity={0.8}
-        disabled={stock <= 0}
-        style={{ opacity: stock <= 0 ? 0.55 : 1 }}
+        disabled={soldOut}
+        style={{ opacity: soldOut ? 0.55 : 1 }}
       >
         <View
           className="flex-row items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"
@@ -1017,9 +1035,9 @@ function ProductRow({ product, onPress, index }: { product: Product; onPress: ()
             <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-800">
               {product.name}
             </Text>
-            <View className={`rounded-md px-1.5 py-0.5 ${sc.bg}`}>
-              <Text className={`text-[10px] font-semibold ${sc.text}`}>
-                {stock <= 0 ? "Out" : stock}
+            <View className={`rounded-md px-1.5 py-0.5 ${tracked ? sc.bg : "bg-slate-100"}`}>
+              <Text className={`text-[10px] font-semibold ${tracked ? sc.text : "text-slate-500"}`}>
+                {!tracked ? "—" : soldOut ? "Out" : limit}
               </Text>
             </View>
           </View>

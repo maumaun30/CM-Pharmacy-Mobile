@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import type { Product } from "@/api/products";
+import { stockLimit, type Product } from "@/api/products";
 
 export interface CartItem {
   product: Product;
@@ -11,22 +11,39 @@ export interface CartItem {
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>([]);
 
-  const add = useCallback((product: Product, qty = 1) => {
+  // Add `qty`, but never let a tracked product exceed its available stock.
+  // Returns true if the requested amount was capped (so the UI can warn).
+  const add = useCallback((product: Product, qty = 1): { capped: boolean } => {
+    const limit = stockLimit(product);
+    let capped = false;
     setItems((prev) => {
       const idx = prev.findIndex((i) => i.product.id === product.id);
+      const currentQty = idx >= 0 ? prev[idx].quantity : 0;
+      let nextQty = currentQty + qty;
+      if (limit != null && nextQty > limit) {
+        nextQty = Math.max(currentQty, limit); // cap; never reduce below current
+        capped = true;
+      }
+      if (nextQty === currentQty) return prev; // already at cap → no-op
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = { ...next[idx], quantity: next[idx].quantity + qty };
+        next[idx] = { ...next[idx], quantity: nextQty };
         return next;
       }
-      return [...prev, { product, quantity: qty, discountId: null, discountedPrice: null }];
+      return [...prev, { product, quantity: nextQty, discountId: null, discountedPrice: null }];
     });
+    return { capped };
   }, []);
 
   const setQty = useCallback((productId: number, qty: number) => {
     setItems((prev) =>
       prev
-        .map((i) => (i.product.id === productId ? { ...i, quantity: qty } : i))
+        .map((i) => {
+          if (i.product.id !== productId) return i;
+          const limit = stockLimit(i.product);
+          const capped = limit != null ? Math.min(qty, limit) : qty;
+          return { ...i, quantity: capped };
+        })
         .filter((i) => i.quantity > 0),
     );
   }, []);
