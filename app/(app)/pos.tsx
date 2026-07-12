@@ -25,7 +25,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react-native";
-import { listProductsByBranch, stockLimit, type Product } from "@/api/products";
+import { listProductsByBranch, stockLimit, stockStatus, type Product, type StockStatus } from "@/api/products";
 import { createSale } from "@/api/sales";
 import dayjs from "dayjs";
 import { printReceipt, kickCashDrawer } from "@/hardware/escpos/printer";
@@ -63,10 +63,20 @@ interface Receipt {
   cashier: string;
 }
 
-function stockColor(stock: number) {
-  if (stock <= 0) return { bg: "bg-red-100", text: "text-red-700" };
-  if (stock < 10) return { bg: "bg-amber-100", text: "text-amber-700" };
-  return { bg: "bg-emerald-100", text: "text-emerald-700" };
+// Badge styling + label per stock status (critical/low reflect branch thresholds).
+function statusBadge(status: StockStatus, qty: number): { bg: string; text: string; label: string; short: string } {
+  switch (status) {
+    case "untracked":
+      return { bg: "bg-slate-100", text: "text-slate-500", label: "Non-stock", short: "—" };
+    case "out":
+      return { bg: "bg-red-100", text: "text-red-700", label: "Out of stock", short: "Out" };
+    case "critical":
+      return { bg: "bg-orange-100", text: "text-orange-700", label: `Critical · ${qty}`, short: String(qty) };
+    case "low":
+      return { bg: "bg-amber-100", text: "text-amber-700", label: `Low · ${qty}`, short: String(qty) };
+    default:
+      return { bg: "bg-emerald-100", text: "text-emerald-700", label: `Stock ${qty}`, short: String(qty) };
+  }
 }
 
 export default function POSScreen() {
@@ -1038,10 +1048,9 @@ function DiscountPicker({
 }
 
 function ProductCard({ product, onPress, index }: { product: Product; onPress: () => void; index: number }) {
-  const limit = stockLimit(product);
-  const tracked = limit != null;
-  const soldOut = tracked && limit <= 0;
-  const sc = stockColor(tracked ? limit : 1);
+  const { status, qty } = stockStatus(product);
+  const badge = statusBadge(status, qty);
+  const soldOut = status === "out";
   return (
     <Animated.View
       entering={FadeIn.duration(180).delay(Math.min(index, 12) * 12).easing(fastOut)}
@@ -1063,9 +1072,9 @@ function ProductCard({ product, onPress, index }: { product: Product; onPress: (
             elevation: 1,
           }}
         >
-        <View className={`mb-2 self-start rounded-md px-2 py-0.5 ${tracked ? sc.bg : "bg-slate-100"}`}>
-          <Text className={`text-[10px] font-semibold ${tracked ? sc.text : "text-slate-500"}`}>
-            {!tracked ? "Non-stock" : soldOut ? "Out of stock" : `Stock ${limit}`}
+        <View className={`mb-2 self-start rounded-md px-2 py-0.5 ${badge.bg}`}>
+          <Text className={`text-[10px] font-semibold ${badge.text}`}>
+            {badge.label}
           </Text>
         </View>
         <Text numberOfLines={2} className="text-sm font-semibold text-slate-800">
@@ -1080,10 +1089,9 @@ function ProductCard({ product, onPress, index }: { product: Product; onPress: (
 }
 
 function ProductRow({ product, onPress, index }: { product: Product; onPress: () => void; index: number }) {
-  const limit = stockLimit(product);
-  const tracked = limit != null;
-  const soldOut = tracked && limit <= 0;
-  const sc = stockColor(tracked ? limit : 1);
+  const { status, qty } = stockStatus(product);
+  const badge = statusBadge(status, qty);
+  const soldOut = status === "out";
   return (
     <Animated.View
       entering={FadeIn.duration(160).delay(Math.min(index, 12) * 8).easing(fastOut)}
@@ -1110,9 +1118,9 @@ function ProductRow({ product, onPress, index }: { product: Product; onPress: ()
             <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-800">
               {product.name}
             </Text>
-            <View className={`rounded-md px-1.5 py-0.5 ${tracked ? sc.bg : "bg-slate-100"}`}>
-              <Text className={`text-[10px] font-semibold ${tracked ? sc.text : "text-slate-500"}`}>
-                {!tracked ? "—" : soldOut ? "Out" : limit}
+            <View className={`rounded-md px-1.5 py-0.5 ${badge.bg}`}>
+              <Text className={`text-[10px] font-semibold ${badge.text}`}>
+                {badge.short}
               </Text>
             </View>
           </View>

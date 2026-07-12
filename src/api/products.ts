@@ -11,7 +11,12 @@ export interface Product {
   track_inventory?: boolean;
   currentStock?: number;
   totalStock?: number;
-  branch_stocks?: { branch_id: number; current_stock: number }[];
+  branch_stocks?: {
+    branch_id: number;
+    current_stock: number;
+    minimum_stock?: number;
+    reorder_point?: number;
+  }[];
 }
 
 // Available units at the active branch, or null when the product doesn't track
@@ -19,6 +24,22 @@ export interface Product {
 export function stockLimit(p: Product): number | null {
   if (p.track_inventory === false) return null;
   return p.currentStock ?? p.branch_stocks?.[0]?.current_stock ?? 0;
+}
+
+export type StockStatus = "untracked" | "out" | "critical" | "low" | "in";
+
+// Classify a product's stock at the active branch against its thresholds:
+// out (<=0), critical (<= minimum), low (<= reorder), else in-stock.
+export function stockStatus(p: Product): { status: StockStatus; qty: number } {
+  if (p.track_inventory === false) return { status: "untracked", qty: 0 };
+  const bs = p.branch_stocks?.[0];
+  const qty = p.currentStock ?? bs?.current_stock ?? 0;
+  const min = bs?.minimum_stock ?? 0;
+  const reorder = bs?.reorder_point ?? 0;
+  if (qty <= 0) return { status: "out", qty };
+  if (min > 0 && qty <= min) return { status: "critical", qty };
+  if (reorder > 0 && qty <= reorder) return { status: "low", qty };
+  return { status: "in", qty };
 }
 
 export async function listProductsByBranch(branchId: number): Promise<Product[]> {
