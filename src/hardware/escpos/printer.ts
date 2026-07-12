@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { PermissionsAndroid, Platform } from "react-native";
 import RNBluetoothClassic from "react-native-bluetooth-classic";
 import { buildReceiptText, type ReceiptData } from "./receiptTemplate";
+import { LOGO_WIDTH_BYTES, LOGO_HEIGHT, LOGO_DATA } from "./logoRaster";
 
 const PRINTER_KEY = "printer_mac";
 
@@ -23,7 +24,23 @@ export const ESCPOS = {
   INIT: [0x1b, 0x40], // ESC @  — reset printer
   CUT: [0x1d, 0x56, 0x00], // GS V 0 — full cut
   DRAWER_KICK: [0x1b, 0x70, 0x00, 0x19, 0xfa], // ESC p 0 25 250 — open drawer
+  ALIGN_CENTER: [0x1b, 0x61, 0x01], // ESC a 1
+  ALIGN_LEFT: [0x1b, 0x61, 0x00], // ESC a 0
 } as const;
+
+// Center-aligned logo bitmap via GS v 0 (raster bit image). LOGO_DATA is a
+// pre-rendered 1-bit monochrome raster (see logoRaster.ts).
+function logoBytes(): number[] {
+  return [
+    ...ESCPOS.ALIGN_CENTER,
+    0x1d, 0x76, 0x30, 0x00, // GS v 0, m = 0 (normal)
+    LOGO_WIDTH_BYTES & 0xff, (LOGO_WIDTH_BYTES >> 8) & 0xff, // xL xH (bytes/row)
+    LOGO_HEIGHT & 0xff, (LOGO_HEIGHT >> 8) & 0xff, // yL yH (rows)
+    ...LOGO_DATA,
+    0x0a, // line feed after the image
+    ...ESCPOS.ALIGN_LEFT,
+  ];
+}
 
 // ─── Bluetooth Classic (SPP) transport ────────────────────────────────────────
 
@@ -82,6 +99,7 @@ export async function printReceipt(
     await connect(mac);
     const payload = [
       ...ESCPOS.INIT,
+      ...logoBytes(),
       ...textToBytes(preview),
       0x0a,
       0x0a,
