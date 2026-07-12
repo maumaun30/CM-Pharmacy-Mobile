@@ -117,9 +117,12 @@ export default function POSScreen() {
             p.sku.toLowerCase() === code.toLowerCase()),
       );
       if (found) {
-        const { capped } = cart.add(found, 1);
-        if (capped) {
-          Alert.alert("Stock limit reached", `Only ${stockLimit(found)} in stock for ${found.name}.`);
+        const { overStock } = cart.add(found, 1);
+        if (overStock) {
+          Alert.alert(
+            "Overselling stock",
+            `${found.name} exceeds available stock (${stockLimit(found)}). This sale will take stock negative.`,
+          );
         }
         setSearch(""); // exact hit → add it and reset the list for the next scan
       } else {
@@ -154,9 +157,12 @@ export default function POSScreen() {
   // Adding by tap also re-arms scanning (a tap can blur the sink).
   const addToCart = useCallback(
     (p: Product, qty = 1) => {
-      const { capped } = cart.add(p, qty);
-      if (capped) {
-        Alert.alert("Stock limit reached", `Only ${stockLimit(p)} in stock for ${p.name}.`);
+      const { overStock } = cart.add(p, qty);
+      if (overStock) {
+        Alert.alert(
+          "Overselling stock",
+          `${p.name} exceeds available stock (${stockLimit(p)}). This sale will take stock negative.`,
+        );
       }
       focusScanner();
     },
@@ -607,20 +613,12 @@ export default function POSScreen() {
                       <Text className="min-w-[24px] text-center text-sm font-semibold text-slate-800">
                         {i.quantity}
                       </Text>
-                      {(() => {
-                        const limit = stockLimit(i.product);
-                        const atMax = limit != null && i.quantity >= limit;
-                        return (
-                          <TouchableOpacity
-                            onPress={() => cart.setQty(i.product.id, i.quantity + 1)}
-                            disabled={atMax}
-                            className="h-7 w-7 items-center justify-center rounded-md border border-emerald-200 bg-white active:bg-emerald-50"
-                            style={{ opacity: atMax ? 0.4 : 1 }}
-                          >
-                            <Plus size={14} color={EMERALD_DARK} />
-                          </TouchableOpacity>
-                        );
-                      })()}
+                      <TouchableOpacity
+                        onPress={() => cart.setQty(i.product.id, i.quantity + 1)}
+                        className="h-7 w-7 items-center justify-center rounded-md border border-emerald-200 bg-white active:bg-emerald-50"
+                      >
+                        <Plus size={14} color={EMERALD_DARK} />
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </Animated.View>
@@ -1053,8 +1051,7 @@ function ProductCard({ product, onPress, index }: { product: Product; onPress: (
       <ListTouchableOpacity
         onPress={onPress}
         activeOpacity={0.8}
-        disabled={soldOut}
-        style={{ flex: 1, opacity: soldOut ? 0.55 : 1 }}
+        style={{ flex: 1, opacity: soldOut ? 0.7 : 1 }}
       >
         <View
           className="flex-1 rounded-xl border border-slate-200 bg-white p-3"
@@ -1096,8 +1093,7 @@ function ProductRow({ product, onPress, index }: { product: Product; onPress: ()
       <ListTouchableOpacity
         onPress={onPress}
         activeOpacity={0.8}
-        disabled={soldOut}
-        style={{ opacity: soldOut ? 0.55 : 1 }}
+        style={{ opacity: soldOut ? 0.7 : 1 }}
       >
         <View
           className="flex-row items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"
