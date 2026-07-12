@@ -28,6 +28,8 @@ import dayjs from "dayjs";
 import { createRefund, listRefunds, listSales, type RefundPayload } from "@/api/sales";
 import { printReceipt } from "@/hardware/escpos/printer";
 import type { ReceiptData } from "@/hardware/escpos/receiptTemplate";
+import { computeVat, type VatLine } from "@/pos/vat";
+import { isVatExemptCategory, type DiscountCategory } from "@/api/discounts";
 import { fromApi } from "@/lib/date";
 import { useAuth } from "@/auth/AuthContext";
 import { can } from "@/auth/permissions";
@@ -48,7 +50,7 @@ interface SaleItem {
   price: number;
   discountedPrice: number | null;
   discountAmount: number;
-  discount: { id: number; name: string; type: string; value: number } | null;
+  discount: { id: number; name: string; type: string; value: number; category?: DiscountCategory } | null;
 }
 
 interface Sale {
@@ -58,6 +60,9 @@ interface Sale {
   subtotal: number | null;
   cashAmount: number | null;
   changeAmount: number | null;
+  customerName?: string | null;
+  customerIdNumber?: string | null;
+  customerDiscountType?: string | null;
   soldAt: string;
   status: string | null;
   branch?: { id: number; name: string; code: string } | null;
@@ -81,8 +86,31 @@ interface RefundRecord {
   }[];
 }
 
-// Rebuild a printable receipt from the loaded sale, for reprinting.
+// Rebuild a printable receipt from the loaded sale, for reprinting — including
+// the VAT breakdown and (for senior/PWD sales) the customer record.
 function saleToReceiptData(s: Sale): ReceiptData {
+  const vatLines: VatLine[] = s.items.map((i) => {
+    const gross = i.price * i.quantity;
+    const lineTotal = (i.discountedPrice ?? i.price) * i.quantity;
+    const exempt = !!i.discount?.category && isVatExemptCategory(i.discount.category);
+    return { gross, lineTotal, vatExempt: exempt };
+  });
+  const vat = computeVat(vatLines);
+  const regularDiscount = s.items.reduce((sum, i) => {
+    const exempt = !!i.discount?.category && isVatExemptCategory(i.discount.category);
+    if (exempt || i.discountedPrice == null) return sum;
+    return sum + (i.price - i.discountedPrice) * i.quantity;
+  }, 0);
+
+  const customer =
+    s.customerName && s.customerDiscountType
+      ? {
+          name: s.customerName,
+          idNumber: s.customerIdNumber ?? "",
+          discountType: s.customerDiscountType,
+        }
+      : null;
+
   return {
     branchName: s.branch?.name ?? "",
     saleId: s.id,
@@ -95,10 +123,12 @@ function saleToReceiptData(s: Sale): ReceiptData {
       discountAmount: i.discountAmount || undefined,
     })),
     subtotal: s.subtotal ?? s.totalAmount,
-    discount: s.totalDiscount,
+    discount: regularDiscount,
     total: s.totalAmount,
     cash: s.cashAmount ?? 0,
     change: s.changeAmount ?? 0,
+    vat,
+    customer,
   };
 }
 

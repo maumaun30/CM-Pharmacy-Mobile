@@ -14,6 +14,10 @@ export interface CreateSalePayload {
   totalDiscount: number;
   total: number;
   cashAmount: number;
+  // Senior/PWD beneficiary (only when a VAT-exempt discount was applied).
+  customerName?: string;
+  customerIdNumber?: string;
+  customerDiscountType?: string;
 }
 
 export async function createSale(payload: CreateSalePayload) {

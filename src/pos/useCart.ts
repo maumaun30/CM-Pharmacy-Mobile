@@ -1,11 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { stockLimit, type Product } from "@/api/products";
+import type { DiscountCategory } from "@/api/discounts";
 
 export interface CartItem {
   product: Product;
   quantity: number;
   discountId: number | null;
   discountedPrice: number | null;
+  discountCategory: DiscountCategory | null;
 }
 
 export function useCart() {
@@ -30,7 +32,7 @@ export function useCart() {
         next[idx] = { ...next[idx], quantity: nextQty };
         return next;
       }
-      return [...prev, { product, quantity: nextQty, discountId: null, discountedPrice: null }];
+      return [...prev, { product, quantity: nextQty, discountId: null, discountedPrice: null, discountCategory: null }];
     });
     return { capped };
   }, []);
@@ -52,9 +54,9 @@ export function useCart() {
     setItems((prev) => prev.filter((i) => i.product.id !== productId));
   }, []);
 
-  const setDiscount = useCallback((productId: number, discountId: number | null, discountedPrice: number | null) => {
+  const setDiscount = useCallback((productId: number, discountId: number | null, discountedPrice: number | null, discountCategory: DiscountCategory | null = null) => {
     setItems((prev) =>
-      prev.map((i) => (i.product.id === productId ? { ...i, discountId, discountedPrice } : i)),
+      prev.map((i) => (i.product.id === productId ? { ...i, discountId, discountedPrice, discountCategory } : i)),
     );
   }, []);
 

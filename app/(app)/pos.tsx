@@ -34,8 +34,11 @@ import {
   applicableForProduct,
   calcDiscountedPrice,
   discountLabel,
+  isVatExemptCategory,
   type Discount,
+  type DiscountCategory,
 } from "@/api/discounts";
+import { computeVat, type VatLine } from "@/pos/vat";
 import { useAuth } from "@/auth/AuthContext";
 import { useCart, type CartItem } from "@/pos/useCart";
 import { useHidScanner } from "@/hardware/useHidScanner";
@@ -80,6 +83,9 @@ export default function POSScreen() {
   const [printing, setPrinting] = useState(false);
   const [discountFor, setDiscountFor] = useState<CartItem | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  // Senior/PWD purchases require capturing the customer's name + ID number.
+  const [customerName, setCustomerName] = useState("");
+  const [customerIdNumber, setCustomerIdNumber] = useState("");
 
   const { data: products = [], refetch, isFetching } = useQuery({
     queryKey: ["products", branchId],
@@ -172,9 +178,20 @@ export default function POSScreen() {
   const branchName = user?.currentBranch?.name ?? user?.branch?.name ?? "—";
   const branchCode = user?.currentBranch?.code ?? user?.branch?.code ?? "";
 
+  // The senior/PWD discount category present in the cart (if any). When set, the
+  // checkout must capture the beneficiary's name + ID (BIR requirement).
+  const exemptType: DiscountCategory | null = useMemo(() => {
+    const it = cart.items.find(
+      (i) => i.discountCategory && isVatExemptCategory(i.discountCategory),
+    );
+    return it?.discountCategory ?? null;
+  }, [cart.items]);
+
   function openCheckout() {
     if (cart.items.length === 0) return;
     setCashInput("");
+    setCustomerName("");
+    setCustomerIdNumber("");
     setCheckoutOpen(true);
   }
 
@@ -183,8 +200,37 @@ export default function POSScreen() {
       Alert.alert("Insufficient cash", "Cash received must be at least the total.");
       return;
     }
+    if (exemptType && (!customerName.trim() || !customerIdNumber.trim())) {
+      Alert.alert(
+        "Customer details required",
+        "Enter the Senior Citizen / PWD customer's name and ID number.",
+      );
+      return;
+    }
     setSubmitting(true);
     try {
+      const customer = exemptType
+        ? {
+            name: customerName.trim(),
+            idNumber: customerIdNumber.trim(),
+            discountType: exemptType,
+          }
+        : null;
+
+      // VAT breakdown (prices are VAT-inclusive) + the "regular" (non SC/PWD)
+      // discount shown separately on the receipt.
+      const vatLines: VatLine[] = cart.items.map((i) => ({
+        gross: i.product.price * i.quantity,
+        lineTotal: (i.discountedPrice ?? i.product.price) * i.quantity,
+        vatExempt: !!i.discountCategory && isVatExemptCategory(i.discountCategory),
+      }));
+      const vat = computeVat(vatLines);
+      const regularDiscount = cart.items.reduce((sum, i) => {
+        const exempt = !!i.discountCategory && isVatExemptCategory(i.discountCategory);
+        if (exempt || i.discountedPrice == null) return sum;
+        return sum + (i.product.price - i.discountedPrice) * i.quantity;
+      }, 0);
+
       const payload = {
         cart: cart.items.map((i) => ({
           productId: i.product.id,
@@ -197,6 +243,9 @@ export default function POSScreen() {
         totalDiscount: cart.discount,
         total: cart.total,
         cashAmount: cash,
+        customerName: customer?.name,
+        customerIdNumber: customer?.idNumber,
+        customerDiscountType: customer?.discountType,
       };
       const result = await createSale(payload);
       const saleId = result?.saleId ?? null;
@@ -218,10 +267,12 @@ export default function POSScreen() {
               : undefined,
         })),
         subtotal: cart.subtotal,
-        discount: cart.discount,
+        discount: regularDiscount,
         total: cart.total,
         cash,
         change,
+        vat,
+        customer,
       };
 
       setReceipt({
@@ -683,6 +734,30 @@ export default function POSScreen() {
               </Text>
             </View>
 
+            {exemptType && (
+              <View className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
+                <Text className="mb-2 text-sm font-semibold text-emerald-800">
+                  {exemptType === "SENIOR_CITIZEN" ? "Senior Citizen" : "PWD"} details
+                  <Text className="text-red-500"> *</Text>
+                </Text>
+                <TextInput
+                  value={customerName}
+                  onChangeText={setCustomerName}
+                  placeholder="Customer name"
+                  placeholderTextColor="#94a3b8"
+                  className="mb-2 rounded-lg border border-emerald-200 bg-white px-3 py-2.5 text-base text-slate-900"
+                />
+                <TextInput
+                  value={customerIdNumber}
+                  onChangeText={setCustomerIdNumber}
+                  placeholder="ID number (SC/PWD)"
+                  placeholderTextColor="#94a3b8"
+                  autoCapitalize="characters"
+                  className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 text-base text-slate-900"
+                />
+              </View>
+            )}
+
             <TouchableOpacity
               onPress={confirmCheckout}
               disabled={submitting || cash < cart.total}
@@ -820,9 +895,9 @@ export default function POSScreen() {
       <DiscountPicker
         item={discountFor}
         onClose={() => setDiscountFor(null)}
-        onApply={(discountId, finalPrice) => {
+        onApply={(discountId, finalPrice, category) => {
           if (!discountFor) return;
-          cart.setDiscount(discountFor.product.id, discountId, finalPrice);
+          cart.setDiscount(discountFor.product.id, discountId, finalPrice, category);
           setDiscountFor(null);
         }}
       />
@@ -838,7 +913,11 @@ function DiscountPicker({
 }: {
   item: CartItem | null;
   onClose: () => void;
-  onApply: (discountId: number | null, finalPrice: number | null) => void;
+  onApply: (
+    discountId: number | null,
+    finalPrice: number | null,
+    category: DiscountCategory | null,
+  ) => void;
 }) {
   const productId = item?.product.id ?? null;
   const { data, isLoading } = useQuery({
@@ -905,7 +984,7 @@ function DiscountPicker({
                     entering={FadeIn.duration(180).delay(Math.min(idx, 8) * 18).easing(fastOut)}
                   >
                     <TouchableOpacity
-                      onPress={() => onApply(d.id, finalPrice)}
+                      onPress={() => onApply(d.id, finalPrice, d.discount_category)}
                       activeOpacity={0.85}
                       className={`mb-2 flex-row items-center gap-3 rounded-xl border p-3 ${
                         selected
@@ -945,7 +1024,7 @@ function DiscountPicker({
 
           {item?.discountId != null && (
             <TouchableOpacity
-              onPress={() => onApply(null, null)}
+              onPress={() => onApply(null, null, null)}
               activeOpacity={0.85}
               className="mt-2 rounded-lg border border-red-200 bg-white py-3 active:bg-red-50"
             >

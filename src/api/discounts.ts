@@ -1,4 +1,5 @@
 import api from "./client";
+import { VAT_RATE } from "@/pos/vat";
 
 export type DiscountType = "PERCENTAGE" | "FIXED_AMOUNT";
 export type DiscountCategory =
@@ -7,6 +8,12 @@ export type DiscountCategory =
   | "PROMOTIONAL"
   | "SEASONAL"
   | "OTHER";
+
+/** Senior Citizen / PWD purchases are VAT-exempt (and their discount is
+ * computed on the VAT-exempt base). Used to trigger name/ID capture too. */
+export function isVatExemptCategory(c: DiscountCategory): boolean {
+  return c === "SENIOR_CITIZEN" || c === "PWD";
+}
 
 export interface Discount {
   id: number;
@@ -29,15 +36,23 @@ export async function applicableForProduct(productId: number): Promise<Discount[
 }
 
 export function calcDiscountedPrice(price: number, d: Discount): { amount: number; finalPrice: number } {
-  let amount =
+  // Senior/PWD: strip the 12% VAT first (their purchase is VAT-exempt), then
+  // apply the discount on the net base. `finalPrice` is what the customer pays;
+  // `amount` is the total reduction from the shelf price (VAT + discount).
+  const vatExempt = isVatExemptCategory(d.discount_category);
+  const base = vatExempt ? price / (1 + VAT_RATE) : price;
+
+  let discount =
     d.discount_type === "PERCENTAGE"
-      ? (price * Number(d.discount_value)) / 100
-      : Math.min(Number(d.discount_value), price);
+      ? (base * Number(d.discount_value)) / 100
+      : Math.min(Number(d.discount_value), base);
   if (d.maximum_discount_amount) {
-    amount = Math.min(amount, Number(d.maximum_discount_amount));
+    discount = Math.min(discount, Number(d.maximum_discount_amount));
   }
-  amount = Math.max(0, Math.min(amount, price));
-  return { amount, finalPrice: Math.max(0, price - amount) };
+  discount = Math.max(0, Math.min(discount, base));
+
+  const finalPrice = Math.max(0, base - discount);
+  return { amount: Math.max(0, price - finalPrice), finalPrice };
 }
 
 export function discountLabel(d: Discount): string {
