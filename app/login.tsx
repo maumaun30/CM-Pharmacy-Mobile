@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Animated, {
   Easing,
   FadeIn,
@@ -286,10 +286,7 @@ export default function Login() {
                 </View>
                 <View className="items-center">
                   <Text className="text-base font-bold text-slate-800">Signing you in</Text>
-                  <View className="mt-0.5 flex-row items-center gap-1.5">
-                    <ActivityIndicator size="small" color={SLATE} />
-                    <Text className="text-xs text-slate-500">Verifying credentials...</Text>
-                  </View>
+                  <Text className="mt-0.5 text-xs text-slate-500">Verifying credentials...</Text>
                 </View>
               </Animated.View>
             ) : (
