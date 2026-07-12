@@ -276,6 +276,14 @@ export default function SaleDetail() {
           <MetaRow icon={<Calendar size={14} color={EMERALD_DARK} />} label="Time">
             {fromApi(sale.soldAt).format("MMM D, YYYY h:mm:ss A")}
           </MetaRow>
+          {sale.customerDiscountType && (
+            <MetaRow
+              icon={<UserIcon size={14} color={EMERALD_DARK} />}
+              label={sale.customerDiscountType === "SENIOR_CITIZEN" ? "Senior Citizen" : "PWD"}
+            >
+              {`${sale.customerName ?? "—"}${sale.customerIdNumber ? ` · ${sale.customerIdNumber}` : ""}`}
+            </MetaRow>
+          )}
         </View>
       </Animated.View>
 
