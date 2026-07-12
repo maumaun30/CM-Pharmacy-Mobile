@@ -29,7 +29,7 @@ import { listProductsByBranch, stockLimit, type Product } from "@/api/products";
 import { createSale } from "@/api/sales";
 import dayjs from "dayjs";
 import { printReceipt, kickCashDrawer } from "@/hardware/escpos/printer";
-import type { ReceiptData } from "@/hardware/escpos/receiptTemplate";
+import { branchReceiptFields, type ReceiptData } from "@/hardware/escpos/receiptTemplate";
 import {
   applicableForProduct,
   calcDiscountedPrice,
@@ -252,7 +252,7 @@ export default function POSScreen() {
 
       // Build the printable receipt from the cart BEFORE clearing it.
       const receiptData: ReceiptData = {
-        branchName,
+        ...branchReceiptFields(user?.currentBranch ?? user?.branch),
         saleId: saleId ?? 0,
         cashier: user?.username ?? "",
         date: dayjs().format("MMM D, YYYY h:mm A"),

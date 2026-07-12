@@ -27,7 +27,7 @@ import {
 import dayjs from "dayjs";
 import { createRefund, listRefunds, listSales, type RefundPayload } from "@/api/sales";
 import { printReceipt } from "@/hardware/escpos/printer";
-import type { ReceiptData } from "@/hardware/escpos/receiptTemplate";
+import { branchReceiptFields, type ReceiptData } from "@/hardware/escpos/receiptTemplate";
 import { computeVat, type VatLine } from "@/pos/vat";
 import { isVatExemptCategory, type DiscountCategory } from "@/api/discounts";
 import { fromApi } from "@/lib/date";
@@ -65,7 +65,11 @@ interface Sale {
   customerDiscountType?: string | null;
   soldAt: string;
   status: string | null;
-  branch?: { id: number; name: string; code: string } | null;
+  branch?: {
+    id: number; name: string; code: string;
+    address?: string | null; city?: string | null; province?: string | null;
+    postal_code?: string | null; phone?: string | null; tin?: string | null;
+  } | null;
   seller?: { id: number; name: string; email?: string } | null;
   items: SaleItem[];
 }
@@ -112,7 +116,7 @@ function saleToReceiptData(s: Sale): ReceiptData {
       : null;
 
   return {
-    branchName: s.branch?.name ?? "",
+    ...branchReceiptFields(s.branch),
     saleId: s.id,
     cashier: s.seller?.name ?? "",
     date: fromApi(s.soldAt).format("MMM D, YYYY h:mm A"),

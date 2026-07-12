@@ -9,6 +9,19 @@ import {
   unlinkGoogle as unlinkGoogleApi,
 } from "@/api/auth";
 
+export interface AuthBranch {
+  id: number;
+  name: string;
+  code: string;
+  is_active: boolean;
+  address?: string | null;
+  city?: string | null;
+  province?: string | null;
+  postal_code?: string | null;
+  phone?: string | null;
+  tin?: string | null;
+}
+
 export interface AuthUser {
   id: number;
   username: string;
@@ -23,8 +36,8 @@ export interface AuthUser {
   branch_id: number;
   current_branch_id: number | null;
   is_active: boolean;
-  branch?: { id: number; name: string; code: string; is_active: boolean };
-  currentBranch?: { id: number; name: string; code: string; is_active: boolean };
+  branch?: AuthBranch;
+  currentBranch?: AuthBranch;
   // Google account linking (from /auth/me). google_linked is derived server-side.
   google_linked?: boolean;
   google_email?: string | null;

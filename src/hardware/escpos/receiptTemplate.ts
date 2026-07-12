@@ -1,11 +1,9 @@
 import type { VatBreakdown } from "@/pos/vat";
 
-// Store identity for the printed header. Configurable via env so it can change
-// without a code edit; falls back to the known brand. Address/TIN are optional
-// (a proper PH VAT receipt shows them) — left blank until provided.
-const STORE_NAME = process.env.EXPO_PUBLIC_SITE_NAME || "Maun Pharmacy";
-const STORE_ADDRESS = process.env.EXPO_PUBLIC_STORE_ADDRESS || "";
-const STORE_TIN = process.env.EXPO_PUBLIC_STORE_TIN || "";
+// The company name is global (one business) — configurable via env, defaults to
+// the brand. Everything branch-specific (address, phone, TIN) comes from the
+// branch record on the receipt data, so each branch prints its own header.
+const COMPANY_NAME = process.env.EXPO_PUBLIC_SITE_NAME || "Maun Pharmacy";
 
 export interface ReceiptLine {
   name: string;
@@ -21,8 +19,40 @@ export interface ReceiptCustomer {
   discountType: string; // "SENIOR_CITIZEN" | "PWD"
 }
 
+// A branch record (from /auth/me or a sale) → the branch header fields on a
+// receipt. Keeps address composition in one place for both new sales + reprints.
+export interface ReceiptBranchInput {
+  name?: string | null;
+  address?: string | null;
+  city?: string | null;
+  province?: string | null;
+  postal_code?: string | null;
+  phone?: string | null;
+  tin?: string | null;
+}
+
+export function branchReceiptFields(b?: ReceiptBranchInput | null): {
+  branchName: string;
+  branchAddress?: string;
+  branchPhone?: string;
+  branchTin?: string;
+} {
+  const address = [b?.address, b?.city, b?.province, b?.postal_code]
+    .filter(Boolean)
+    .join(", ");
+  return {
+    branchName: b?.name ?? "",
+    branchAddress: address || undefined,
+    branchPhone: b?.phone || undefined,
+    branchTin: b?.tin || undefined,
+  };
+}
+
 export interface ReceiptData {
   branchName: string;
+  branchAddress?: string; // composed from the branch record (address, city, province)
+  branchPhone?: string;
+  branchTin?: string;
   saleId: number;
   cashier: string;
   date: string;
@@ -49,6 +79,23 @@ function row(left: string, right: string, width = COL): string {
   return left + " ".repeat(space) + right;
 }
 
+// Word-wrap a long line (e.g. a branch address) to the paper width.
+function wrap(text: string, width = COL): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  let line = "";
+  for (const w of words) {
+    if (line && line.length + 1 + w.length > width) {
+      out.push(line);
+      line = w;
+    } else {
+      line = line ? `${line} ${w}` : w;
+    }
+  }
+  if (line) out.push(line);
+  return out;
+}
+
 function money(n: number): string {
   return n.toFixed(2);
 }
@@ -63,10 +110,13 @@ export function buildReceiptText(d: ReceiptData): string {
   const lines: string[] = [];
 
   // ── Header ──
-  lines.push(center(STORE_NAME));
-  if (STORE_ADDRESS) lines.push(center(STORE_ADDRESS));
-  if (STORE_TIN) lines.push(center(`TIN: ${STORE_TIN}`));
+  lines.push(center(COMPANY_NAME));
   lines.push(center(d.branchName));
+  if (d.branchAddress) {
+    for (const l of wrap(d.branchAddress, COL)) lines.push(center(l));
+  }
+  if (d.branchPhone) lines.push(center(`Tel: ${d.branchPhone}`));
+  if (d.branchTin) lines.push(center(`TIN: ${d.branchTin}`));
   lines.push(center(`Sale #${d.saleId}  ${d.date}`));
   lines.push(center(`Cashier: ${d.cashier}`));
   lines.push("-".repeat(COL));
