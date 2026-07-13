@@ -134,7 +134,7 @@ export default function SettingsScreen() {
   const confirmDisconnectGoogle = () => {
     Alert.alert(
       "Disconnect Google",
-      "You'll still sign in with your username, password, or PIN.",
+      "You'll still sign in with your username and password.",
       [
         { text: "Cancel", style: "cancel" },
         {
