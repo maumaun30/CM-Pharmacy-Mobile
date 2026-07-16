@@ -25,7 +25,8 @@ import {
   User as UserIcon,
 } from "lucide-react-native";
 import dayjs from "dayjs";
-import { createRefund, listRefunds, listSales, type RefundPayload } from "@/api/sales";
+import { createRefund, createRefundRequest, listRefunds, listSales, type RefundPayload } from "@/api/sales";
+import { useBranchSocket } from "@/socket/useBranchSocket";
 import { printReceipt } from "@/hardware/escpos/printer";
 import { branchReceiptFields, type ReceiptData } from "@/hardware/escpos/receiptTemplate";
 import { computeVat, type VatLine } from "@/pos/vat";
@@ -142,6 +143,7 @@ export default function SaleDetail() {
   const [refundOpen, setRefundOpen] = useState(false);
   const [printing, setPrinting] = useState(false);
   const { user } = useAuth();
+  const qc = useQueryClient();
   // Issuing refunds is a supervisor action (API: sales.refund → admin + manager).
   // Cashiers can still view the sale and its refund history, just not refund.
   const canRefund = can(user, "sales.refund");
@@ -149,6 +151,22 @@ export default function SaleDetail() {
   const { data, isLoading } = useQuery({
     queryKey: ["sales"],
     queryFn: () => listSales(),
+  });
+
+  // Live feedback for the requester: when a supervisor resolves this user's
+  // refund request remotely, refresh the sale/refunds and tell them.
+  const activeBranchId = user?.current_branch_id ?? user?.branch_id ?? null;
+  useBranchSocket(activeBranchId, {
+    onRefundRequestResolved: (p) => {
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["refunds", saleId] });
+      if (p?.requested_by === user?.id) {
+        Alert.alert(
+          p?.status === "approved" ? "Refund request approved" : "Refund request declined",
+          `Sale #${p?.sale_id}${p?.review_note ? ` — ${p.review_note}` : ""}`,
+        );
+      }
+    },
   });
 
   const sale: Sale | null = useMemo(() => {
@@ -606,15 +624,38 @@ function RefundModal({
     },
   });
 
+  // No supervisor on the floor? Send the refund for remote approval instead.
+  const requestMutation = useMutation({
+    mutationFn: (payload: { items: { saleItemId: number; quantity: number }[]; reason?: string }) =>
+      createRefundRequest(sale.id, payload),
+    onSuccess: () => {
+      setQtyByItem({});
+      setReason("");
+      setManagerPin("");
+      onClose();
+      Alert.alert(
+        "Request sent",
+        `₱${refundTotal.toFixed(2)} refund request submitted — you'll be notified once a manager reviews it.`,
+      );
+    },
+    onError: (e: any) => {
+      Alert.alert("Request failed", e?.response?.data?.message ?? e?.message ?? "Unknown error");
+    },
+  });
+
   function setQty(saleItemId: number, refundable: number, next: number) {
     const clamped = Math.max(0, Math.min(refundable, next));
     setQtyByItem((prev) => ({ ...prev, [saleItemId]: clamped }));
   }
 
-  function submit() {
-    const items = refundLines
+  function selectedItems() {
+    return refundLines
       .filter((l) => l.qty > 0)
       .map((l) => ({ saleItemId: l.saleItemId, quantity: l.qty }));
+  }
+
+  function submit() {
+    const items = selectedItems();
     if (items.length === 0) {
       Alert.alert("Nothing to refund", "Pick at least one item to refund.");
       return;
@@ -628,6 +669,15 @@ function RefundModal({
       reason: reason.trim() || undefined,
       managerPin: requirePin ? managerPin.trim() : undefined,
     });
+  }
+
+  function submitRequest() {
+    const items = selectedItems();
+    if (items.length === 0) {
+      Alert.alert("Nothing to refund", "Pick at least one item to refund.");
+      return;
+    }
+    requestMutation.mutate({ items, reason: reason.trim() || undefined });
   }
 
   return (
@@ -743,6 +793,26 @@ function RefundModal({
               />
               <Text className="mt-1 text-[11px] text-amber-700">
                 A manager or admin must enter their PIN to approve this refund.
+              </Text>
+
+              <TouchableOpacity
+                onPress={submitRequest}
+                disabled={requestMutation.isPending || totalQty === 0}
+                activeOpacity={0.85}
+                className="mt-3 flex-row items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white py-2.5 active:bg-amber-100"
+                style={{ opacity: requestMutation.isPending || totalQty === 0 ? 0.6 : 1 }}
+              >
+                {requestMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#b45309" />
+                ) : (
+                  <Undo2 size={14} color="#b45309" />
+                )}
+                <Text className="text-sm font-semibold text-amber-800">
+                  {requestMutation.isPending ? "Sending request..." : "No manager around? Request approval"}
+                </Text>
+              </TouchableOpacity>
+              <Text className="mt-1 text-[10px] text-amber-700">
+                Sends the refund for remote approval — no PIN needed.
               </Text>
             </View>
           )}

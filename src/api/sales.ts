@@ -52,3 +52,13 @@ export async function listRefunds(saleId: number) {
   const res = await api.get(`/sales/${saleId}/refunds`);
   return res.data;
 }
+
+// Async alternative to the PIN flow: submit a refund request that a manager
+// or admin approves remotely (web /refunds or the admin app).
+export async function createRefundRequest(
+  saleId: number,
+  payload: { items: { saleItemId: number; quantity: number }[]; reason?: string },
+) {
+  const res = await api.post(`/sales/${saleId}/refund-requests`, payload);
+  return res.data as { message: string; refund_request: { id: number; status: string; total_refund: number } };
+}

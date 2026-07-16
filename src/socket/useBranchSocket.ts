@@ -6,6 +6,11 @@ export interface BranchSocketEvents {
   onStockUpdated?: (payload: any) => void;
   onNewSale?: (payload: any) => void;
   onLowStockAlert?: (payload: any) => void;
+  // Refund request lifecycle (resolved payload includes status + requested_by).
+  onRefundRequestNew?: (payload: any) => void;
+  onRefundRequestResolved?: (payload: any) => void;
+  // Personal notification row (server targets the user-${id} room).
+  onNotificationNew?: (payload: any) => void;
 }
 
 export function useBranchSocket(branchId: number | null | undefined, events: BranchSocketEvents) {
@@ -50,6 +55,9 @@ export function useBranchSocket(branchId: number | null | undefined, events: Bra
       socket.on("stock-updated", (p) => eventsRef.current.onStockUpdated?.(p));
       socket.on("new-sale", (p) => eventsRef.current.onNewSale?.(p));
       socket.on("low-stock-alert", (p) => eventsRef.current.onLowStockAlert?.(p));
+      socket.on("refund-request:new", (p) => eventsRef.current.onRefundRequestNew?.(p));
+      socket.on("refund-request:resolved", (p) => eventsRef.current.onRefundRequestResolved?.(p));
+      socket.on("notification:new", (p) => eventsRef.current.onNotificationNew?.(p));
     })();
 
     return () => {
