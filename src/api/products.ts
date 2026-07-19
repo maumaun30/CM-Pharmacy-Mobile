@@ -43,6 +43,20 @@ export function stockStatus(p: Product): { status: StockStatus; qty: number } {
 }
 
 export async function listProductsByBranch(branchId: number): Promise<Product[]> {
-  const res = await api.get("/products", { params: { branchId, status: "ACTIVE" } });
-  return res.data;
+  const { cacheProducts, getCachedProducts } = await import("@/offline/outbox");
+  try {
+    const res = await api.get("/products", { params: { branchId, status: "ACTIVE" } });
+    // API returns newest-first; POS wants an A-Z catalog.
+    const sorted = (res.data as Product[]).sort((a, b) => a.name.localeCompare(b.name));
+    await cacheProducts(branchId, sorted);
+    return sorted;
+  } catch (e: any) {
+    // Network down (no HTTP response): fall back to the last synced catalog so
+    // the POS keeps selling offline. Real HTTP errors still propagate.
+    if (!e?.response) {
+      const cached = await getCachedProducts(branchId);
+      if (cached) return cached;
+    }
+    throw e;
+  }
 }

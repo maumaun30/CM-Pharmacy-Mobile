@@ -1,13 +1,15 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { TouchableOpacity as ListTouchableOpacity } from "react-native-gesture-handler";
 import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import { FlashList } from "@shopify/flash-list";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Receipt, RotateCw, Search, ShoppingBag, User as UserIcon } from "lucide-react-native";
+import { ChevronRight, CloudOff, Receipt, RotateCw, Search, ShoppingBag, User as UserIcon } from "lucide-react-native";
 import dayjs from "dayjs";
 import { listSales } from "@/api/sales";
+import { getOutbox, subscribeOutbox, type OfflineSale } from "@/offline/outbox";
+import { useOffline } from "@/offline/useOffline";
 import { useAuth } from "@/auth/AuthContext";
 import { useBranchSocket } from "@/socket/useBranchSocket";
 import { fromApi } from "@/lib/date";
@@ -57,6 +59,17 @@ export default function SalesList() {
   );
 
   const [search, setSearch] = useState("");
+
+  // Offline sales still waiting to sync, shown above the synced list.
+  const { online, syncNow } = useOffline();
+  const [pending, setPending] = useState<OfflineSale[]>([]);
+  const refreshPending = useCallback(() => {
+    getOutbox().then(setPending);
+  }, []);
+  useEffect(() => {
+    refreshPending();
+    return subscribeOutbox(refreshPending);
+  }, [refreshPending]);
 
   const sales: Sale[] = useMemo(() => {
     const arr: Sale[] = Array.isArray(data) ? data : data?.sales ?? [];
@@ -121,11 +134,54 @@ export default function SalesList() {
         </Animated.View>
       </View>
 
+      {pending.length > 0 && (
+        <View className="px-4 pb-1">
+          <View className="mb-1 flex-row items-center justify-between">
+            <View className="flex-row items-center gap-1.5">
+              <CloudOff size={14} color="#b45309" />
+              <Text className="text-xs font-bold text-amber-700">
+                Pending sync ({pending.length})
+              </Text>
+            </View>
+            {online && (
+              <TouchableOpacity onPress={() => syncNow()} className="rounded-md px-2 py-1">
+                <Text className="text-xs font-semibold text-emerald-700">Sync now</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {pending.map((p) => (
+            <Card key={p.clientRef} className="mb-2 flex-row items-center gap-3 border border-amber-200 bg-amber-50 p-3">
+              <View className="h-11 w-11 items-center justify-center rounded-full bg-amber-100">
+                <CloudOff size={18} color="#b45309" />
+              </View>
+              <View className="flex-1">
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-sm font-bold text-slate-800">Offline sale</Text>
+                  <Pill label="Pending sync" variant="warning" />
+                </View>
+                <Text className="mt-0.5 text-[11px] text-slate-500">
+                  {dayjs(p.soldAt).format("MMM D, h:mm A")} • {p.itemsCount}{" "}
+                  {p.itemsCount === 1 ? "item" : "items"}
+                </Text>
+                {p.lastError && (
+                  <Text className="mt-0.5 text-[11px] font-medium text-red-600">
+                    Sync failed: {p.lastError}
+                  </Text>
+                )}
+              </View>
+              <Text className="text-base font-extrabold text-amber-700">
+                ₱{p.total.toFixed(2)}
+              </Text>
+            </Card>
+          ))}
+        </View>
+      )}
+
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={colors.emerald} />
         </View>
-      ) : sales.length === 0 ? (
+      ) : sales.length === 0 && pending.length === 0 ? (
         <ScrollView
           contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 24 }}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.emerald} />}

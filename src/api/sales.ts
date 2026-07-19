@@ -18,6 +18,10 @@ export interface CreateSalePayload {
   customerName?: string;
   customerIdNumber?: string;
   customerDiscountType?: string;
+  // Offline sync: idempotency key + device sale time (set when replaying a
+  // queued offline sale; omitted for normal online sales).
+  clientRef?: string;
+  soldAt?: string;
 }
 
 export async function createSale(payload: CreateSalePayload) {
@@ -26,8 +30,20 @@ export async function createSale(payload: CreateSalePayload) {
 }
 
 export async function listSales(params?: Record<string, unknown>) {
-  const res = await api.get("/sales", { params });
-  return res.data;
+  const { cacheSales, getCachedSales } = await import("@/offline/outbox");
+  try {
+    const res = await api.get("/sales", { params });
+    if (!params) await cacheSales(res.data);
+    return res.data;
+  } catch (e: any) {
+    // Offline: show the last synced sales list (pending offline sales are
+    // rendered separately from the outbox).
+    if (!e?.response && !params) {
+      const cached = await getCachedSales();
+      if (cached) return cached;
+    }
+    throw e;
+  }
 }
 
 export async function getSale(saleId: number) {

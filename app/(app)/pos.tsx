@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Modal, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 // Core RN touchables don't receive presses inside a FlashList under
@@ -26,7 +26,9 @@ import {
   WifiOff,
 } from "lucide-react-native";
 import { listProductsByBranch, stockLimit, stockStatus, type Product, type StockStatus } from "@/api/products";
-import { createSale } from "@/api/sales";
+import { createSale, type CreateSalePayload } from "@/api/sales";
+import { addToOutbox, adjustCachedStock, makeClientRef } from "@/offline/outbox";
+import { useOffline } from "@/offline/useOffline";
 import dayjs from "dayjs";
 import { printReceipt, kickCashDrawer } from "@/hardware/escpos/printer";
 import { branchReceiptFields, type ReceiptData } from "@/hardware/escpos/receiptTemplate";
@@ -52,6 +54,7 @@ const fastOut = EASE;
 
 interface Receipt {
   saleId: number | null;
+  offline?: boolean; // queued locally, not yet synced to the server
   items: CartItem[];
   subtotal: number;
   discount: number;
@@ -106,6 +109,7 @@ export default function POSScreen() {
   const { connected: socketLive } = useBranchSocket(branchId, {
     onStockUpdated: () => refetch(),
   });
+  const { online, pendingCount } = useOffline();
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -165,9 +169,12 @@ export default function POSScreen() {
   }, [checkoutOpen, receipt, focusSinkSoon]);
 
   // Adding by tap also re-arms scanning (a tap can blur the sink).
+  // Depends on cart.add (stable) rather than the cart object (new each render)
+  // so the memoized product cards don't re-render on every cart change.
+  const cartAdd = cart.add;
   const addToCart = useCallback(
     (p: Product, qty = 1) => {
-      const { overStock } = cart.add(p, qty);
+      const { overStock } = cartAdd(p, qty);
       if (overStock) {
         Alert.alert(
           "Overselling stock",
@@ -176,7 +183,7 @@ export default function POSScreen() {
       }
       focusScanner();
     },
-    [cart, focusScanner],
+    [cartAdd, focusScanner],
   );
 
   // Refresh products whenever the POS screen regains focus (returning from
@@ -247,7 +254,7 @@ export default function POSScreen() {
         return sum + (i.product.price - i.discountedPrice) * i.quantity;
       }, 0);
 
-      const payload = {
+      const payload: CreateSalePayload = {
         cart: cart.items.map((i) => ({
           productId: i.product.id,
           quantity: i.quantity,
@@ -263,8 +270,42 @@ export default function POSScreen() {
         customerIdNumber: customer?.idNumber,
         customerDiscountType: customer?.discountType,
       };
-      const result = await createSale(payload);
-      const saleId = result?.saleId ?? null;
+
+      // Offline path: queue the sale locally instead of failing the checkout.
+      // Taken when the device knows it's offline, or when the POST dies without
+      // an HTTP response (connection dropped mid-checkout). Real HTTP errors
+      // (validation, auth) still fail loudly below.
+      let saleId: number | null = null;
+      let queuedOffline = false;
+      const queueOffline = async () => {
+        const clientRef = makeClientRef();
+        await addToOutbox({
+          clientRef,
+          soldAt: new Date().toISOString(),
+          branchId: branchId as number,
+          payload,
+          total: cart.total,
+          itemsCount: cart.items.length,
+          queuedAt: new Date().toISOString(),
+        });
+        await adjustCachedStock(
+          branchId as number,
+          payload.cart.map((c) => ({ productId: c.productId, quantity: c.quantity })),
+        );
+        queuedOffline = true;
+      };
+
+      if (!online) {
+        await queueOffline();
+      } else {
+        try {
+          const result = await createSale(payload);
+          saleId = result?.saleId ?? null;
+        } catch (e: any) {
+          if (e?.response) throw e;
+          await queueOffline();
+        }
+      }
 
       // Build the printable receipt from the cart BEFORE clearing it.
       const receiptData: ReceiptData = {
@@ -293,6 +334,7 @@ export default function POSScreen() {
 
       setReceipt({
         saleId,
+        offline: queuedOffline,
         items: [...cart.items],
         subtotal: cart.subtotal,
         discount: cart.discount,
@@ -303,7 +345,8 @@ export default function POSScreen() {
         branchName,
         cashier: user?.username ?? "",
       });
-      setPrintData(receiptData);
+      // No printing for offline sales (receipt gets its real number after sync).
+      setPrintData(queuedOffline ? null : receiptData);
       setCheckoutOpen(false);
       cart.clear();
       refetch();
@@ -397,6 +440,17 @@ export default function POSScreen() {
           </View>
         </View>
       </Animated.View>
+
+      {/* ── OFFLINE BANNER ──────────────────────────────────────────── */}
+      {!online && (
+        <View className="flex-row items-center justify-center gap-2 bg-amber-500 px-4 py-1.5">
+          <WifiOff size={14} color="#fff" />
+          <Text className="text-xs font-bold text-white">
+            OFFLINE — sales are saved on this device and sync automatically
+            {pendingCount > 0 ? ` (${pendingCount} pending)` : ""}
+          </Text>
+        </View>
+      )}
 
       {/* ── MAIN CONTENT (products + cart) ──────────────────────────── */}
       <View className="flex-1 flex-row">
@@ -497,11 +551,11 @@ export default function POSScreen() {
                   tintColor={EMERALD}
                 />
               }
-              renderItem={({ item, index }) =>
+              renderItem={({ item }) =>
                 viewMode === "grid" ? (
-                  <ProductCard product={item} onPress={() => addToCart(item, 1)} index={index} />
+                  <ProductCard product={item} onAdd={addToCart} />
                 ) : (
-                  <ProductRow product={item} onPress={() => addToCart(item, 1)} index={index} />
+                  <ProductRow product={item} onAdd={addToCart} />
                 )
               }
             />
@@ -817,9 +871,15 @@ export default function POSScreen() {
                 <CheckCircle2 size={28} color="#fff" />
               </View>
               <Text className="text-lg font-bold text-slate-800">Sale Complete</Text>
-              {receipt?.saleId && (
+              {receipt?.offline ? (
+                <View className="mt-1 rounded-md bg-amber-100 px-2 py-0.5">
+                  <Text className="text-xs font-semibold text-amber-700">
+                    Saved offline — syncs when back online
+                  </Text>
+                </View>
+              ) : receipt?.saleId ? (
                 <Text className="text-xs text-slate-500">Receipt #{receipt.saleId}</Text>
-              )}
+              ) : null}
             </View>
 
             <Text className="text-center text-sm font-semibold text-slate-700">
@@ -872,6 +932,7 @@ export default function POSScreen() {
             </View>
 
             <View className="mt-4 flex-row gap-2">
+              {!receipt?.offline && (
               <TouchableOpacity
                 onPress={printCurrentReceipt}
                 disabled={printing}
@@ -886,6 +947,7 @@ export default function POSScreen() {
                 )}
                 <Text className="text-center text-sm font-semibold text-emerald-700">Print Receipt</Text>
               </TouchableOpacity>
+              )}
               <TouchableOpacity
                 onPress={() => setReceipt(null)}
                 activeOpacity={0.85}
@@ -1047,94 +1109,89 @@ function DiscountPicker({
   );
 }
 
-function ProductCard({ product, onPress, index }: { product: Product; onPress: () => void; index: number }) {
+// Product cells are memoized and animation-free: FlashList recycles views while
+// scrolling, and reanimated entering/layout animations re-run on every recycle,
+// which causes visible jank with large catalogs. `onAdd` must stay
+// referentially stable for the memo to hold.
+const ProductCard = memo(function ProductCard({
+  product,
+  onAdd,
+}: {
+  product: Product;
+  onAdd: (p: Product, qty?: number) => void;
+}) {
   const { status, qty } = stockStatus(product);
   const badge = statusBadge(status, qty);
   const soldOut = status === "out";
   return (
-    <Animated.View
-      entering={FadeIn.duration(180).delay(Math.min(index, 12) * 12).easing(fastOut)}
-      layout={LinearTransition.duration(180)}
-      className="m-1 flex-1"
-    >
+    <View className="m-1 flex-1">
       <ListTouchableOpacity
-        onPress={onPress}
+        onPress={() => onAdd(product, 1)}
         activeOpacity={0.8}
         style={{ flex: 1, opacity: soldOut ? 0.7 : 1 }}
       >
-        <View
-          className="flex-1 rounded-xl border border-slate-200 bg-white p-3"
-          style={{
-            shadowColor: "#000",
-            shadowOpacity: 0.04,
-            shadowRadius: 4,
-            shadowOffset: { width: 0, height: 1 },
-            elevation: 1,
-          }}
-        >
-        <View className={`mb-2 self-start rounded-md px-2 py-0.5 ${badge.bg}`}>
-          <Text className={`text-[10px] font-semibold ${badge.text}`}>
-            {badge.label}
+        <View className="flex-1 rounded-xl border border-slate-200 bg-white p-3">
+          <View className={`mb-2 self-start rounded-md px-2 py-0.5 ${badge.bg}`}>
+            <Text className={`text-[10px] font-semibold ${badge.text}`}>
+              {badge.label}
+            </Text>
+          </View>
+          {/* Fixed two-line block so every card in a row is the same height. */}
+          <Text
+            numberOfLines={2}
+            className="text-sm font-semibold leading-5 text-slate-800"
+            style={{ minHeight: 40 }}
+          >
+            {product.name}
           </Text>
-        </View>
-        <Text numberOfLines={2} className="text-sm font-semibold text-slate-800">
-          {product.name}
-        </Text>
-        <Text className="mt-0.5 text-[11px] text-slate-500">{product.sku}</Text>
-        <Text className="mt-2 text-base font-bold text-emerald-600">₱{product.price.toFixed(2)}</Text>
+          <Text className="mt-0.5 text-[11px] text-slate-500">{product.sku}</Text>
+          <Text className="mt-2 text-base font-bold text-emerald-600">₱{product.price.toFixed(2)}</Text>
         </View>
       </ListTouchableOpacity>
-    </Animated.View>
+    </View>
   );
-}
+});
 
-function ProductRow({ product, onPress, index }: { product: Product; onPress: () => void; index: number }) {
+const ProductRow = memo(function ProductRow({
+  product,
+  onAdd,
+}: {
+  product: Product;
+  onAdd: (p: Product, qty?: number) => void;
+}) {
   const { status, qty } = stockStatus(product);
   const badge = statusBadge(status, qty);
   const soldOut = status === "out";
   return (
-    <Animated.View
-      entering={FadeIn.duration(160).delay(Math.min(index, 12) * 8).easing(fastOut)}
-      layout={LinearTransition.duration(180)}
-      className="px-1 py-0.5"
-    >
+    <View className="px-1 py-0.5">
       <ListTouchableOpacity
-        onPress={onPress}
+        onPress={() => onAdd(product, 1)}
         activeOpacity={0.8}
         style={{ opacity: soldOut ? 0.7 : 1 }}
       >
-        <View
-          className="flex-row items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"
-          style={{
-            shadowColor: "#000",
-            shadowOpacity: 0.03,
-            shadowRadius: 4,
-            shadowOffset: { width: 0, height: 1 },
-            elevation: 1,
-          }}
-        >
-        <View className="flex-1">
-          <View className="flex-row items-center gap-2">
-            <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-800">
-              {product.name}
-            </Text>
-            <View className={`rounded-md px-1.5 py-0.5 ${badge.bg}`}>
-              <Text className={`text-[10px] font-semibold ${badge.text}`}>
-                {badge.short}
+        <View className="flex-row items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
+          <View className="flex-1">
+            <View className="flex-row items-center gap-2">
+              <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-800">
+                {product.name}
               </Text>
+              <View className={`rounded-md px-1.5 py-0.5 ${badge.bg}`}>
+                <Text className={`text-[10px] font-semibold ${badge.text}`}>
+                  {badge.short}
+                </Text>
+              </View>
             </View>
+            {/* <Text className="mt-0.5 text-[11px] text-slate-500">{product.sku}</Text> */}
           </View>
-          {/* <Text className="mt-0.5 text-[11px] text-slate-500">{product.sku}</Text> */}
-        </View>
-        <Text className="text-base font-bold text-emerald-600">₱{product.price.toFixed(2)}</Text>
-        <View className="h-8 w-8 items-center justify-center rounded-md bg-emerald-100">
-          <Plus size={14} color={EMERALD_DARK} />
-        </View>
+          <Text className="text-base font-bold text-emerald-600">₱{product.price.toFixed(2)}</Text>
+          <View className="h-8 w-8 items-center justify-center rounded-md bg-emerald-100">
+            <Plus size={14} color={EMERALD_DARK} />
+          </View>
         </View>
       </ListTouchableOpacity>
-    </Animated.View>
+    </View>
   );
-}
+});
 
 function QuickCash({ label, onPress }: { label: string; onPress: () => void }) {
   return (

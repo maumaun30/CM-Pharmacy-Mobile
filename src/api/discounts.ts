@@ -31,8 +31,19 @@ export interface Discount {
 }
 
 export async function applicableForProduct(productId: number): Promise<Discount[]> {
-  const res = await api.get(`/discounts/product/${productId}/applicable`);
-  return res.data;
+  const { cacheDiscounts, getCachedDiscounts } = await import("@/offline/outbox");
+  try {
+    const res = await api.get(`/discounts/product/${productId}/applicable`);
+    await cacheDiscounts(productId, res.data);
+    return res.data;
+  } catch (e: any) {
+    // Offline: apply discounts from the last synced list for this product.
+    if (!e?.response) {
+      const cached = await getCachedDiscounts(productId);
+      if (cached) return cached;
+    }
+    throw e;
+  }
 }
 
 export function calcDiscountedPrice(price: number, d: Discount): { amount: number; finalPrice: number } {
