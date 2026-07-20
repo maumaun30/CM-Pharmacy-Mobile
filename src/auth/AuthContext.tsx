@@ -103,17 +103,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => setUnauthorizedHandler(null);
   }, [router]);
 
+  // Superadmin logins never return a token here — the API answers with a TOTP
+  // challenge that only the web UI implements.
+  const assertNotTotpChallenge = (res: Record<string, unknown>) => {
+    if (res.requires_totp || res.requires_totp_setup) {
+      throw new Error("Superadmin must use the web app.");
+    }
+  };
+
   const signIn = useCallback(async (username: string, password: string) => {
-    const { token } = await loginApi(username, password);
-    await setToken(token);
+    const res = await loginApi(username, password);
+    assertNotTotpChallenge(res as unknown as Record<string, unknown>);
+    await setToken(res.token);
     const full = await meApi();
     setUser(full);
   }, []);
 
   // Google login: exchange the Google ID token for our JWT (same shape as signIn).
   const signInWithGoogle = useCallback(async (idToken: string) => {
-    const { token } = await googleLoginApi(idToken);
-    await setToken(token);
+    const res = await googleLoginApi(idToken);
+    assertNotTotpChallenge(res as unknown as Record<string, unknown>);
+    await setToken(res.token);
     const full = await meApi();
     setUser(full);
   }, []);
