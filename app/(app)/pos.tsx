@@ -613,7 +613,12 @@ export default function POSScreen() {
               </Text>
             </Animated.View>
           ) : (
-            <View className="flex-1">
+            <ScrollView
+              className="flex-1"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 8 }}
+              keyboardShouldPersistTaps="handled"
+            >
               {cart.items.map((i, idx) => (
                 <Animated.View
                   key={i.product.id}
@@ -687,7 +692,7 @@ export default function POSScreen() {
                   </View>
                 </Animated.View>
               ))}
-            </View>
+            </ScrollView>
           )}
         </View>
 
