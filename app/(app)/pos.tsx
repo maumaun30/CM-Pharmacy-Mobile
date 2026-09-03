@@ -46,6 +46,7 @@ import { useCart, type CartItem } from "@/pos/useCart";
 import { useHidScanner } from "@/hardware/useHidScanner";
 import { useBranchSocket } from "@/socket/useBranchSocket";
 import { colors, EASE } from "@/ui/theme";
+import { STALE } from "@/api/staleTimes";
 
 const EMERALD = colors.emerald;
 const EMERALD_DARK = colors.emeraldDark;
@@ -104,6 +105,8 @@ export default function POSScreen() {
     queryKey: ["products", branchId],
     queryFn: () => (branchId ? listProductsByBranch(branchId) : Promise.resolve([] as Product[])),
     enabled: !!branchId,
+    // Stock deltas arrive over the socket; the catalog itself barely moves.
+    staleTime: STALE.COLD,
   });
 
   const { connected: socketLive } = useBranchSocket(branchId, {
@@ -999,6 +1002,7 @@ function DiscountPicker({
     queryKey: ["discounts", productId],
     queryFn: () => applicableForProduct(productId as number),
     enabled: !!productId,
+    staleTime: STALE.COLD,
   });
   const discounts = (data ?? []).filter((d) => d.is_enabled);
   const price = item?.product.price ?? 0;
