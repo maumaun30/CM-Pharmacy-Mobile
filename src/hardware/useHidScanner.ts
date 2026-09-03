@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { TextInput } from "react-native";
+import { pokeActivity } from "@/power/activity";
 
 export interface UseHidScannerOptions {
   onScan: (code: string) => void;
@@ -12,6 +13,8 @@ export function useHidScanner({ onScan, minLength = 3 }: UseHidScannerOptions) {
   const [lastScan, setLastScan] = useState<string | null>(null);
 
   const handleChange = useCallback((text: string) => {
+    // A scan is activity even though it produces no touch — keep the screen up.
+    pokeActivity();
     setBuffer(text);
   }, []);
 

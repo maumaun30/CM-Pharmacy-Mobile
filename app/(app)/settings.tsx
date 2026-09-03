@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 import dayjs from "dayjs";
 import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import {
@@ -10,6 +10,7 @@ import {
   KeyRound,
   Link2,
   LogOut,
+  Moon,
   Printer,
   Scan,
   Server,
@@ -32,6 +33,13 @@ import {
 } from "@/hardware/escpos/printer";
 import { colors, EASE } from "@/ui/theme";
 import { ScreenHeader } from "@/ui/ScreenHeader";
+import { usePowerSave } from "@/power/PowerSaveContext";
+import {
+  DIM_AFTER_CHOICES,
+  DIM_LEVEL_CHOICES,
+  SLEEP_AFTER_CHOICES,
+  formatDuration,
+} from "@/power/settings";
 
 const EMERALD = colors.emerald;
 const EMERALD_DARK = colors.emeraldDark;
@@ -40,6 +48,7 @@ const fastOut = EASE;
 
 export default function SettingsScreen() {
   const { user, signOut, linkGoogle, unlinkGoogle } = useAuth();
+  const power = usePowerSave();
   const [printerMac, setPrinterMac] = useState<string | null>(null);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [pairOpen, setPairOpen] = useState(false);
@@ -474,6 +483,86 @@ export default function SettingsScreen() {
           </View>
         </Animated.View>
 
+        {/* ── Power saving ─────────────────────────────────────────── */}
+        <Animated.View
+          entering={FadeInUp.duration(260).delay(140).easing(fastOut)}
+          className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white"
+          style={{
+            shadowColor: "#000",
+            shadowOpacity: 0.04,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 2,
+          }}
+        >
+          <SectionHeader icon={<Moon size={14} color={EMERALD_DARK} />} label="Power Saving" />
+          <View className="p-4">
+            <View className="flex-row items-center gap-3">
+              <View
+                className={`h-10 w-10 items-center justify-center rounded-full ${
+                  power.prefs.enabled ? "bg-emerald-600" : "bg-slate-200"
+                }`}
+              >
+                <Moon size={18} color={power.prefs.enabled ? "#fff" : SLATE} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm font-semibold text-slate-800">Dim when idle</Text>
+                <Text className="mt-0.5 text-xs text-slate-500">
+                  Lowers the backlight instead of letting the screen switch off. Tap the screen to
+                  resume.
+                </Text>
+              </View>
+              <Switch
+                value={power.prefs.enabled}
+                onValueChange={(v) => power.updatePrefs({ enabled: v })}
+                trackColor={{ false: "#cbd5e1", true: "#a7f3d0" }}
+                thumbColor={power.prefs.enabled ? EMERALD : "#f1f5f9"}
+              />
+            </View>
+
+            {power.prefs.enabled && (
+              <View className="mt-4 gap-3">
+                <ChipRow
+                  label="Dim after"
+                  options={DIM_AFTER_CHOICES.map((s) => ({
+                    label: formatDuration(s),
+                    value: s,
+                  }))}
+                  selected={power.prefs.dimAfterSec}
+                  onSelect={(v) => power.updatePrefs({ dimAfterSec: v })}
+                />
+                <ChipRow
+                  label="Dim level"
+                  options={DIM_LEVEL_CHOICES.map((c) => ({ label: c.label, value: c.value }))}
+                  selected={power.prefs.dimLevel}
+                  onSelect={(v) => power.updatePrefs({ dimLevel: v })}
+                />
+                <ChipRow
+                  label="Sleep after"
+                  options={SLEEP_AFTER_CHOICES.map((s) => ({
+                    label: formatDuration(s),
+                    value: s,
+                  }))}
+                  selected={power.prefs.sleepAfterSec}
+                  onSelect={(v) => power.updatePrefs({ sleepAfterSec: v })}
+                />
+                <Text className="text-[11px] leading-4 text-slate-500">
+                  While dimmed the tablet is kept awake. After the sleep delay it goes back to
+                  Android&apos;s own screen timeout, so an unplugged tablet is not lit all night.
+                </Text>
+                <TouchableOpacity
+                  onPress={power.dimNow}
+                  activeOpacity={0.85}
+                  className="flex-row items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white py-2.5 active:bg-emerald-50"
+                >
+                  <Moon size={14} color={EMERALD_DARK} />
+                  <Text className="text-sm font-semibold text-emerald-700">Preview dim now</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </Animated.View>
+
         {/* ── Server ────────────────────────────────────────────────── */}
         <Animated.View
           entering={FadeInUp.duration(260).delay(160).easing(fastOut)}
@@ -615,6 +704,48 @@ function SectionHeader({ icon, label }: { icon: React.ReactNode; label: string }
     <View className="flex-row items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-4 py-2">
       {icon}
       <Text className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">{label}</Text>
+    </View>
+  );
+}
+
+
+function ChipRow({
+  label,
+  options,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  options: { label: string; value: number }[];
+  selected: number;
+  onSelect: (value: number) => void;
+}) {
+  return (
+    <View>
+      <Text className="mb-1.5 text-xs font-medium text-slate-600">{label}</Text>
+      <View className="flex-row flex-wrap gap-2">
+        {options.map((opt) => {
+          const active = opt.value === selected;
+          return (
+            <TouchableOpacity
+              key={String(opt.value)}
+              onPress={() => onSelect(opt.value)}
+              activeOpacity={0.85}
+              className={`rounded-lg border px-3 py-1.5 ${
+                active ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"
+              }`}
+            >
+              <Text
+                className={`text-xs font-semibold ${
+                  active ? "text-emerald-700" : "text-slate-600"
+                }`}
+              >
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }

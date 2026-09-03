@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { AuthProvider } from "@/auth/AuthContext";
+import { PowerSaveProvider } from "@/power/PowerSaveContext";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,6 +20,7 @@ const queryClient = new QueryClient({
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <PowerSaveProvider>
       <SafeAreaProvider>
       <BottomSheetModalProvider>
         <QueryClientProvider client={queryClient}>
@@ -32,6 +34,7 @@ export default function RootLayout() {
         </QueryClientProvider>
       </BottomSheetModalProvider>
       </SafeAreaProvider>
+      </PowerSaveProvider>
     </GestureHandlerRootView>
   );
 }
