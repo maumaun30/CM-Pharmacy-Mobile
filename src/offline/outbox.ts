@@ -104,6 +104,23 @@ export async function getCachedProducts(branchId: number): Promise<Product[] | n
   }
 }
 
+// Set cached stock to an absolute value, for a "stock-updated" socket payload
+// that already carries the authoritative quantity. Keeps the offline catalog in
+// step with the in-memory query cache without refetching /products.
+export async function setCachedStock(
+  branchId: number,
+  productId: number,
+  newStock: number,
+): Promise<void> {
+  const products = await getCachedProducts(branchId);
+  if (!products) return;
+  const p = products.find((x) => x.id === productId);
+  if (!p || p.track_inventory === false) return;
+  if (p.currentStock != null) p.currentStock = newStock;
+  if (p.branch_stocks?.[0]) p.branch_stocks[0].current_stock = newStock;
+  await cacheProducts(branchId, products);
+}
+
 // Decrement cached stock for a queued offline sale so the POS shows the branch's
 // remaining stock across consecutive offline sales. Negative is allowed (same
 // soft-warn policy as online overselling).

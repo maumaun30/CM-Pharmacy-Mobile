@@ -7,7 +7,7 @@ import { TouchableOpacity as ListTouchableOpacity } from "react-native-gesture-h
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { Easing, FadeIn, FadeInDown, FadeInRight, LinearTransition, ZoomIn } from "react-native-reanimated";
 import { FlashList } from "@shopify/flash-list";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   CreditCard,
@@ -27,7 +27,7 @@ import {
 } from "lucide-react-native";
 import { listProductsByBranch, stockLimit, stockStatus, type Product, type StockStatus } from "@/api/products";
 import { createSale, type CreateSalePayload } from "@/api/sales";
-import { addToOutbox, adjustCachedStock, makeClientRef } from "@/offline/outbox";
+import { addToOutbox, adjustCachedStock, makeClientRef, setCachedStock } from "@/offline/outbox";
 import { useOffline } from "@/offline/useOffline";
 import dayjs from "dayjs";
 import { printReceipt, kickCashDrawer } from "@/hardware/escpos/printer";
@@ -88,6 +88,7 @@ export default function POSScreen() {
   const { user } = useAuth();
   const branchId = user?.current_branch_id ?? user?.branch_id ?? null;
   const cart = useCart();
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [cashInput, setCashInput] = useState("");
@@ -109,8 +110,51 @@ export default function POSScreen() {
     staleTime: STALE.COLD,
   });
 
+  // "stock-updated" carries { productId, newStock }, so patch the cached row
+  // rather than refetching. The old refetch() re-pulled the ENTIRE branch
+  // catalog on every stock event — one admin editing stock for N products cost
+  // N full-catalog fetches on every tablet, which is what drove droplet load.
+  // The only case that still needs a pull is a product this tablet has never
+  // seen (the first delivery for a newly created item).
   const { connected: socketLive } = useBranchSocket(branchId, {
-    onStockUpdated: () => refetch(),
+    onStockUpdated: (payload: { productId?: number; newStock?: number }) => {
+      const { productId, newStock } = payload ?? {};
+      if (typeof productId !== "number" || typeof newStock !== "number") return;
+      if (!branchId) return;
+
+      // setQueryData's updater runs synchronously, so `patched` is reliable here.
+      let patched = false;
+      let hadCatalog = true;
+      qc.setQueryData<Product[]>(["products", branchId], (prev) => {
+        if (!prev) {
+          // Catalog hasn't loaded yet; the in-flight initial fetch will bring
+          // this quantity anyway. Refetching here would storm on app start.
+          hadCatalog = false;
+          return prev;
+        }
+        const idx = prev.findIndex((p) => p.id === productId);
+        if (idx === -1) return prev;
+        patched = true;
+        const row = { ...prev[idx] };
+        if (row.currentStock != null) row.currentStock = newStock;
+        if (row.branch_stocks?.[0]) {
+          row.branch_stocks = [
+            { ...row.branch_stocks[0], current_stock: newStock },
+            ...row.branch_stocks.slice(1),
+          ];
+        }
+        const next = [...prev];
+        next[idx] = row;
+        return next;
+      });
+
+      if (patched) {
+        // Keep the offline catalog in step; it is what the POS falls back to.
+        void setCachedStock(branchId, productId, newStock);
+      } else if (hadCatalog) {
+        refetch();
+      }
+    },
   });
   const { online, pendingCount } = useOffline();
 
