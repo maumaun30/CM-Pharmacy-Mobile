@@ -45,7 +45,9 @@ export function stockStatus(p: Product): { status: StockStatus; qty: number } {
 export async function listProductsByBranch(branchId: number): Promise<Product[]> {
   const { cacheProducts, getCachedProducts } = await import("@/offline/outbox");
   try {
-    const res = await api.get("/products", { params: { branchId, status: "ACTIVE" } });
+    // fields=pos: slim catalog (no descriptions, timestamps or joins) with
+    // exactly the fields the POS reads. It's also what gets cached for offline.
+    const res = await api.get("/products", { params: { branchId, status: "ACTIVE", fields: "pos" } });
     // API returns newest-first; POS wants an A-Z catalog.
     const sorted = (res.data as Product[]).sort((a, b) => a.name.localeCompare(b.name));
     await cacheProducts(branchId, sorted);
